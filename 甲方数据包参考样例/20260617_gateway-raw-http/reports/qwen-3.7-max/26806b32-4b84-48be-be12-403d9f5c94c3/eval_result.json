@@ -1,0 +1,15 @@
+{
+  "model_id": "qwen-3.7-max",
+  "session_id": "26806b32-4b84-48be-be12-403d9f5c94c3",
+  "eval_exit_code": 0,
+  "reward": "1",
+  "eval_pass": true,
+  "docker_image": "harbor-eval-qwen-3-7-max-26806b32-4b84-48be-be12-403d9f5c94c3",
+  "logs": {
+    "stdout": "eval_stdout.log",
+    "docker_build": "docker_build.log"
+  },
+  "gt_eval_corrected": true,
+  "corrected_at": "2026-06-17T18:22:00",
+  "notes": "Docker eval exit=0, 8/8 acceptance passed; reward.txt was blank (test.sh did not write it in this run), manually set reward=1 per SOP \u00a7B3."
+}

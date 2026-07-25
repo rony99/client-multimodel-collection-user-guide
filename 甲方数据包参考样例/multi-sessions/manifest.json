@@ -1,0 +1,98 @@
+{
+  "task_id": "20260617_gateway-raw-http",
+  "purpose": "multi-sessions：同一题目、各模型多次独立 session 的通过情况（用于核验 pass@4 / 区分度）",
+  "related_package": "./20260617_gateway-raw-http/",
+  "models": [
+    {
+      "session_id": "a4d11c0c-9b8d-4c9f-9e33-525d187969b7",
+      "model_id": "claude-opus-4-8",
+      "eval_pass": true,
+      "path": "claude-opus-4-8/a4d11c0c-9b8d-4c9f-9e33-525d187969b7.jsonl",
+      "note": "mock session for structure demo"
+    },
+    {
+      "session_id": "b1e22d1d-1111-4aaa-8bbb-111111111111",
+      "model_id": "claude-opus-4-8",
+      "eval_pass": false,
+      "path": "claude-opus-4-8/b1e22d1d-1111-4aaa-8bbb-111111111111.jsonl",
+      "note": "mock session for structure demo"
+    },
+    {
+      "session_id": "c2f33e2e-2222-4bbb-8ccc-222222222222",
+      "model_id": "claude-opus-4-8",
+      "eval_pass": true,
+      "path": "claude-opus-4-8/c2f33e2e-2222-4bbb-8ccc-222222222222.jsonl",
+      "note": "mock session for structure demo"
+    },
+    {
+      "session_id": "d3a44f3f-3333-4ccc-8ddd-333333333333",
+      "model_id": "claude-opus-4-8",
+      "eval_pass": false,
+      "path": "claude-opus-4-8/d3a44f3f-3333-4ccc-8ddd-333333333333.jsonl",
+      "note": "mock session for structure demo"
+    },
+    {
+      "session_id": "26806b32-4b84-48be-be12-403d9f5c94c3",
+      "model_id": "qwen-3.7-max",
+      "eval_pass": false,
+      "path": "qwen-3.7-max/26806b32-4b84-48be-be12-403d9f5c94c3.jsonl",
+      "note": "mock session for structure demo"
+    },
+    {
+      "session_id": "e4a55a4a-4444-4ddd-8eee-444444444444",
+      "model_id": "qwen-3.7-max",
+      "eval_pass": false,
+      "path": "qwen-3.7-max/e4a55a4a-4444-4ddd-8eee-444444444444.jsonl",
+      "note": "mock session for structure demo"
+    },
+    {
+      "session_id": "f5a66a5a-5555-4eee-8fff-555555555555",
+      "model_id": "qwen-3.7-max",
+      "eval_pass": true,
+      "path": "qwen-3.7-max/f5a66a5a-5555-4eee-8fff-555555555555.jsonl",
+      "note": "mock session for structure demo"
+    },
+    {
+      "session_id": "20687f9d-402b-468b-9735-12f0c6575aaa",
+      "model_id": "glm-5.2",
+      "eval_pass": true,
+      "path": "glm-5.2/20687f9d-402b-468b-9735-12f0c6575aaa.jsonl",
+      "note": "mock session for structure demo"
+    },
+    {
+      "session_id": "a6a77a6a-6666-4fff-8000-666666666666",
+      "model_id": "glm-5.2",
+      "eval_pass": false,
+      "path": "glm-5.2/a6a77a6a-6666-4fff-8000-666666666666.jsonl",
+      "note": "mock session for structure demo"
+    },
+    {
+      "session_id": "a7a88a7a-7777-4000-8111-777777777777",
+      "model_id": "glm-5.2",
+      "eval_pass": true,
+      "path": "glm-5.2/a7a88a7a-7777-4000-8111-777777777777.jsonl",
+      "note": "mock session for structure demo"
+    }
+  ],
+  "summary": {
+    "claude-opus-4-8": {
+      "runs": 4,
+      "passes": 2,
+      "pass_at_4": "50%"
+    },
+    "qwen-3.7-max": {
+      "runs": 3,
+      "passes": 1,
+      "approx_pass_rate": "33%"
+    },
+    "glm-5.2": {
+      "runs": 3,
+      "passes": 2,
+      "approx_pass_rate": "67%"
+    }
+  },
+  "notes": [
+    "本目录为众包交卷附加物示意：与甲方原格式数据包平级提交。",
+    "正式交卷时请替换为真实 Claude Code session；Opus 建议交齐 4 次。"
+  ]
+}

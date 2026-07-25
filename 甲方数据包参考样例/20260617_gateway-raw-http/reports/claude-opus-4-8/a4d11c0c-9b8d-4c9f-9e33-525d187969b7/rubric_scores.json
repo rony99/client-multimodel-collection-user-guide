@@ -1,0 +1,133 @@
+{
+  "task_id": "20260617_gateway-raw-http",
+  "model_id": "claude-opus-4-8",
+  "session_id": "a4d11c0c-9b8d-4c9f-9e33-525d187969b7",
+  "run_index": 1,
+  "rubric_version": "1.0.0",
+  "rubric_task_type": "code_generation",
+  "reviewer": "rony",
+  "reviewed_at": "2026-06-17T20:30:00+08:00",
+  "eval_pass": true,
+  "turns": 96,
+  "weights": {
+    "correctness": 0.35,
+    "code_quality": 0.25,
+    "reasoning": 0.15,
+    "tool_usage": 0.1,
+    "efficiency": 0.15
+  },
+  "scores": {
+    "correctness": 5,
+    "code_quality": 4,
+    "reasoning": 4,
+    "tool_usage": 4,
+    "efficiency": 3
+  },
+  "weighted_total": 4.2,
+  "dynamic_verification": {
+    "verification_mode": "session_trajectory + workspace_static",
+    "acceptance_pytest": "8 passed（会话内 Docker eval stdout 全绿）",
+    "workspace_source": "workspace_env/repo/gateway",
+    "harbor_docker_eval": "未单独重跑（按轨迹采集口径；eval_pass 来自会话内 Docker pytest 证据）"
+  },
+  "trajectory_audit": {
+    "claude_session": "a4d11c0c-9b8d-4c9f-9e33-525d187969b7",
+    "claude_project": "workspace-env-repo-gateway",
+    "tool_invocations": {
+      "Bash": 16,
+      "Read": 8,
+      "Write": 2,
+      "Edit": 8,
+      "TaskCreate": 4,
+      "TaskUpdate": 4,
+      "Task": 0,
+      "Glob": 0,
+      "Grep": 0
+    },
+    "session_duration_min": 17.4
+  },
+  "dimension_notes": {
+    "correctness": {
+      "score": 5,
+      "label": "优秀",
+      "evidence": [
+        "会话内 docker build + pytest acceptance 全通过",
+        "gateway/raw_http_log.py、scripts/raw_to_sharegpt.py 均已实现",
+        "?session_id= query 参数与 header 日志符合 test_raw_http_trace 契约"
+      ],
+      "task_criteria_met": [
+        "自动判题通过",
+        "trace 采集与 ShareGPT 转换齐备"
+      ]
+    },
+    "code_quality": {
+      "score": 4,
+      "label": "良好",
+      "evidence": [
+        "模块命名与既有 gateway/proxy 风格一致",
+        "fixtures 复用 tests/fixtures/raw_http_demo-sess-001.jsonl",
+        "实现体量适中"
+      ],
+      "task_criteria_met": [
+        "风格一致",
+        "文件结构清晰"
+      ]
+    },
+    "reasoning": {
+      "score": 4,
+      "label": "良好",
+      "evidence": [
+        "先读 tests/acceptance/test_raw_http_trace.py 再实现",
+        "TaskCreate/TaskUpdate 自管多步任务",
+        "Docker 内验证避免宿主环境差异"
+      ],
+      "task_criteria_met": [
+        "TDD 契约驱动",
+        "实现路径清晰"
+      ]
+    },
+    "tool_usage": {
+      "score": 4,
+      "label": "良好",
+      "evidence": [
+        "Read 验收测试与 gateway 模块后 Write/Edit",
+        "Bash docker build + pytest",
+        "未使用 Task 委派"
+      ],
+      "task_criteria_met": [
+        "工具组合合理"
+      ]
+    },
+    "efficiency": {
+      "score": 2,
+      "label": "待提高",
+      "evidence": [
+        "96 assistant 轮次偏高",
+        "多次 Edit 与 Docker 重试",
+        "无显著死循环但路径偏长"
+      ],
+      "task_criteria_met": [
+        "正确性优先",
+        "效率偏低"
+      ]
+    }
+  },
+  "summary_zh": "claude-opus-4-8 运行时完成 gateway-raw-http（8/8 acceptance）；会话内 Docker eval 通过。96 轮效率扣分。实际模型按 claude-opus-4-8 标记。综合 4.05/5。",
+  "requested_model_note": "original requested slot claude-opus-4.6 was unavailable; actual collected model is claude-opus-4-8",
+  "auto_review": {
+    "reviewer": "agent-static-dynamic-audit (单 AI 临时)",
+    "scores": {
+      "correctness": 5,
+      "code_quality": 4,
+      "reasoning": 4,
+      "tool_usage": 4,
+      "efficiency": 2
+    },
+    "weighted_total": 4.05
+  },
+  "review_status": "human_reviewed",
+  "human_review_note_zh": "Opus 4.8 真实运行结果通过验收，修改路径清晰；轮次偏多但仍比临时评分略放宽效率。",
+  "agreement_score_status": "complete",
+  "agreement_score_method": "same_model_dimension_exact_match_rate_auto_vs_rony",
+  "agreement_score": 0.8
+}

@@ -1,0 +1,188 @@
+{
+  "task_id": "20260617_gateway-raw-http",
+  "rubric_version": "1.0.0",
+  "weights": {
+    "correctness": 0.35,
+    "code_quality": 0.25,
+    "reasoning": 0.15,
+    "tool_usage": 0.1,
+    "efficiency": 0.15
+  },
+  "sessions": [
+    {
+      "model_id": "claude-opus-4-8",
+      "session_id": "a4d11c0c-9b8d-4c9f-9e33-525d187969b7",
+      "run_index": 1,
+      "eval_pass": true,
+      "turns": 96,
+      "weighted_total": 4.2,
+      "reviewer": "rony",
+      "collected_at": "2026-06-17T15:51:51.208179",
+      "rubric_report": "../reports/claude-opus-4-8/a4d11c0c-9b8d-4c9f-9e33-525d187969b7/rubric_scores.json"
+    },
+    {
+      "model_id": "qwen-3.7-max",
+      "session_id": "26806b32-4b84-48be-be12-403d9f5c94c3",
+      "run_index": 1,
+      "eval_pass": true,
+      "turns": 107,
+      "weighted_total": 3.9,
+      "reviewer": "rony",
+      "collected_at": "2026-06-17T15:51:51.208179",
+      "rubric_report": "../reports/qwen-3.7-max/26806b32-4b84-48be-be12-403d9f5c94c3/rubric_scores.json"
+    },
+    {
+      "model_id": "glm-5.2",
+      "session_id": "20687f9d-402b-468b-9735-12f0c6575aaa",
+      "run_index": 1,
+      "eval_pass": true,
+      "turns": 85,
+      "weighted_total": 4.3,
+      "reviewer": "rony",
+      "collected_at": "2026-06-17T15:51:51.208179",
+      "rubric_report": "../reports/glm-5.2/20687f9d-402b-468b-9735-12f0c6575aaa/rubric_scores.json"
+    }
+  ],
+  "models": {
+    "glm-5.2": {
+      "representative_run_index": 1,
+      "representative_session_id": "20687f9d-402b-468b-9735-12f0c6575aaa",
+      "eval_pass": true,
+      "turns": 85,
+      "scores": {
+        "correctness": 5,
+        "code_quality": 5,
+        "reasoning": 4,
+        "tool_usage": 4,
+        "efficiency": 2
+      },
+      "weighted_total": 4.3,
+      "reviewer": "rony",
+      "agreement_score": 0.8,
+      "agreement_score_status": "complete",
+      "auto_review": {
+        "reviewer": "agent-static-dynamic-audit (单 AI 临时)",
+        "scores": {
+          "correctness": 5,
+          "code_quality": 5,
+          "reasoning": 4,
+          "tool_usage": 4,
+          "efficiency": 3
+        },
+        "weighted_total": 4.55
+      },
+      "review_status": "human_reviewed",
+      "reviewed_at": "2026-06-17T20:30:00+08:00",
+      "human_review_note_zh": "实现质量最好，但 85 轮仍偏长，人工复核对效率比临时评分更严格。",
+      "agreement_score_method": "same_model_dimension_exact_match_rate_auto_vs_rony"
+    },
+    "qwen-3.7-max": {
+      "representative_run_index": 1,
+      "representative_session_id": "26806b32-4b84-48be-be12-403d9f5c94c3",
+      "eval_pass": true,
+      "turns": 107,
+      "scores": {
+        "correctness": 5,
+        "code_quality": 4,
+        "reasoning": 3,
+        "tool_usage": 4,
+        "efficiency": 2
+      },
+      "weighted_total": 3.9,
+      "reviewer": "rony",
+      "agreement_score": 1.0,
+      "agreement_score_status": "complete",
+      "auto_review": {
+        "reviewer": "agent-static-dynamic-audit (单 AI 临时)",
+        "scores": {
+          "correctness": 5,
+          "code_quality": 4,
+          "reasoning": 3,
+          "tool_usage": 4,
+          "efficiency": 2
+        },
+        "weighted_total": 3.85
+      },
+      "review_status": "human_reviewed",
+      "reviewed_at": "2026-06-17T20:30:00+08:00",
+      "human_review_note_zh": "最终正确，且包含一次有效 subagent 委派；轮次较多、推理压缩一般。",
+      "agreement_score_method": "same_model_dimension_exact_match_rate_auto_vs_rony"
+    },
+    "claude-opus-4-8": {
+      "representative_run_index": 1,
+      "representative_session_id": "a4d11c0c-9b8d-4c9f-9e33-525d187969b7",
+      "eval_pass": true,
+      "turns": 96,
+      "scores": {
+        "correctness": 5,
+        "code_quality": 4,
+        "reasoning": 4,
+        "tool_usage": 4,
+        "efficiency": 3
+      },
+      "weighted_total": 4.2,
+      "reviewer": "rony",
+      "agreement_score": 0.8,
+      "agreement_score_status": "complete",
+      "requested_model_note": "original requested slot claude-opus-4.6 was unavailable; actual collected model is claude-opus-4-8",
+      "auto_review": {
+        "reviewer": "agent-static-dynamic-audit (单 AI 临时)",
+        "scores": {
+          "correctness": 5,
+          "code_quality": 4,
+          "reasoning": 4,
+          "tool_usage": 4,
+          "efficiency": 2
+        },
+        "weighted_total": 4.05
+      },
+      "review_status": "human_reviewed",
+      "reviewed_at": "2026-06-17T20:30:00+08:00",
+      "human_review_note_zh": "Opus 4.8 真实运行结果通过验收，修改路径清晰；轮次偏多但仍比临时评分略放宽效率。",
+      "agreement_score_method": "same_model_dimension_exact_match_rate_auto_vs_rony"
+    }
+  },
+  "quality_gate": {
+    "avg_turns": 82.0,
+    "pass_rates": {
+      "glm-5.2": 1.0,
+      "qwen-3.7-max": 1.0,
+      "claude-opus-4-8": 1.0
+    },
+    "pass_rate_diff_qwen_vs_opus": 0.0,
+    "notes": "单 session 代表值；四模型均通过。opus 模型 claude-opus-4-8；本题区分度主要体现在轮次与 rubric 加权分（glm 4.55 > opus 4.05 > qwen 3.85 > sonnet 4.1）。"
+  },
+  "notes": "4/4 模型轨迹已采集；Opus 轨迹按真实运行模型 claude-opus-4-8 标记。rubric 分数已由 rony 人工复核；agreement_score 为临时 AI 评审与 rony 人工复核的一致性，不等同双人工一致性。system_prompt/tool definitions 已用用户提供的 Claude Code Gateway capture 补入。",
+  "quality_gate_status": "not_applicable_single_run_per_model",
+  "quality_gate_note": "Each model currently has one representative run; pass-rate thresholds require multiple independent runs and second human review.",
+  "model_substitution": {
+    "requested_model": "claude-opus-4.6",
+    "actual_collected_model": "claude-opus-4-8",
+    "reason": "claude-opus-4.6 unavailable; trajectory and reports are marked with actual collected model claude-opus-4-8"
+  },
+  "human_review": {
+    "status": "complete",
+    "reviewer": "rony",
+    "reviewed_at": "2026-06-17T20:30:00+08:00",
+    "basis": "Human review based on session trajectories, eval reports, rubric reports, and confirmed scoring scheme.",
+    "agreement_scope": "assistant_static_dynamic_audit_vs_rony_human_review; not two independent human reviewers"
+  },
+  "reviewed_at": "2026-06-17T20:30:00+08:00",
+  "reviewer": "rony",
+  "runtime_config_capture_status": "captured",
+  "agreement_score": 0.909,
+  "agreement_score_status": "complete",
+  "agreement_score_method": "pearson_r_over_model_dimension_scores_auto_audit_vs_rony_review",
+  "agreement_exact_match_rate": 0.85,
+  "runtime_config_capture_source": {
+    "source_type": "gateway_capture",
+    "capture_version": "go-raw-v1",
+    "product": "claude-code",
+    "request_id": "2d593910abc6fcc7724ed6dbd5f3866b",
+    "session_id": "4c2fd227-d5d8-41e4-95ec-ed6e8f9498ba",
+    "timestamp": "2026-05-21T05:54:08.201094939Z",
+    "upstream_model": "claude-opus-4-7-think",
+    "body_path": "upstream.request_body.body_raw_json",
+    "note": "Captured from Claude Code Gateway request payload supplied by user; shared across task/model trajectory snapshots per user instruction."
+  }
+}

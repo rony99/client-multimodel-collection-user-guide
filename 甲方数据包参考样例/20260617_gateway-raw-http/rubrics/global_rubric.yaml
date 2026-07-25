@@ -1,0 +1,111 @@
+# Code Agent Rubric — Global Standard (embedded copy)
+# Source: op.md Annotation Guidelines (code-agent-rubrics v1.0.0)
+# Bundled in delivery package for portability (no external ../../../op.md dependency).
+
+metadata:
+  name: "code-agent-rubrics"
+  version: "1.0.0"
+  description: "Code Agent 多维度 Rubric 评分标准"
+  scoring_scale: 5
+  supported_task_types:
+    - code_generation
+    - bug_fix
+    - code_qa
+    - refactor
+
+dimensions:
+  correctness:
+    name: "正确性"
+    name_en: "Correctness"
+    description: "最终产出是否正确、完整地解决了任务目标"
+    applicable_to: [code_generation, bug_fix, code_qa, refactor]
+    scale:
+      5: { label: "优秀", criteria: "完全正确地解决了问题；通过所有测试用例（含边界）" }
+      4: { label: "良好", criteria: "核心功能正确，少量边界或次要遗漏" }
+      3: { label: "及格", criteria: "主体方向正确，有明显缺陷需进一步修改" }
+      2: { label: "不足", criteria: "重大错误或关键功能缺失，无法直接使用" }
+      1: { label: "很差", criteria: "完全未能解决问题或代码无法运行" }
+
+  code_quality:
+    name: "代码质量"
+    name_en: "Code Quality"
+    description: "可读性、规范性、最佳实践"
+    applicable_to: [code_generation, bug_fix, refactor]
+    scale:
+      5: { label: "优秀", criteria: "结构清晰，命名规范，无代码异味" }
+      4: { label: "良好", criteria: "整体质量好，少量可改进之处" }
+      3: { label: "及格", criteria: "能工作但命名/结构/重复代码有问题" }
+      2: { label: "不足", criteria: "质量较低，不遵循基本规范" }
+      1: { label: "很差", criteria: "几乎不可维护" }
+
+  reasoning:
+    name: "推理过程"
+    name_en: "Reasoning"
+    description: "问题分析、方案规划、信息收集与决策"
+    applicable_to: [code_generation, bug_fix, code_qa, refactor]
+    scale:
+      5: { label: "优秀", criteria: "准确理解问题，清晰方案，有效调整策略" }
+      4: { label: "良好", criteria: "分析基本清晰，偶有冗余" }
+      3: { label: "及格", criteria: "理解不够深入，需多次尝试" }
+      2: { label: "不足", criteria: "理解偏差，分析混乱" }
+      1: { label: "很差", criteria: "未能理解问题本质" }
+
+  tool_usage:
+    name: "工具使用"
+    name_en: "Tool Usage"
+    description: "是否合理高效使用可用工具"
+    applicable_to: [code_generation, bug_fix, code_qa, refactor]
+    scale:
+      5: { label: "优秀", criteria: "工具选择精准，无冗余调用" }
+      4: { label: "良好", criteria: "基本合理，偶有次优" }
+      3: { label: "及格", criteria: "能完成但有不必要或遗漏的工具使用" }
+      2: { label: "不足", criteria: "效率低下，频繁无效调用" }
+      1: { label: "很差", criteria: "几乎不会使用工具" }
+
+  efficiency:
+    name: "效率"
+    name_en: "Efficiency"
+    description: "步骤数、时间利用、冗余操作"
+    applicable_to: [code_generation, bug_fix, code_qa, refactor]
+    scale:
+      5: { label: "优秀", criteria: "最少步骤高效完成" }
+      4: { label: "良好", criteria: "路径基本高效" }
+      3: { label: "及格", criteria: "能完成但有绕弯或重复" }
+      2: { label: "不足", criteria: "大量冗余或无关探索" }
+      1: { label: "很差", criteria: "极其低效或死循环" }
+
+  explanation:
+    name: "解释质量"
+    name_en: "Explanation"
+    description: "回答/解释的准确性、清晰度（仅 code_qa）"
+    applicable_to: [code_qa]
+    scale:
+      5: { label: "优秀", criteria: "准确全面，有代码证据" }
+      3: { label: "及格", criteria: "方向正确但不够完整" }
+      1: { label: "很差", criteria: "完全错误或无关" }
+
+task_type_weights:
+  bug_fix:
+    correctness: 0.35
+    code_quality: 0.25
+    reasoning: 0.15
+    tool_usage: 0.10
+    efficiency: 0.15
+  code_generation:
+    correctness: 0.35
+    code_quality: 0.25
+    reasoning: 0.15
+    tool_usage: 0.10
+    efficiency: 0.15
+  code_qa:
+    correctness: 0.35
+    code_quality: 0.25
+    reasoning: 0.15
+    tool_usage: 0.10
+    efficiency: 0.15
+  refactor:
+    correctness: 0.35
+    code_quality: 0.25
+    reasoning: 0.15
+    tool_usage: 0.10
+    efficiency: 0.15

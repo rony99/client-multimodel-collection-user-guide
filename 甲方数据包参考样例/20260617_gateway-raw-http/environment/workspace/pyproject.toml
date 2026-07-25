@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lightweight-gateway"
+version = "0.1.0"
+description = "Trajectory collection HTTP proxy for agent → LLM calls"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "httpx>=0.28.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.4.0", "pytest-asyncio>=0.24.0", "ruff>=0.8.0"]
+
+[project.scripts]
+lightweight-gateway = "gateway.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["gateway*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"

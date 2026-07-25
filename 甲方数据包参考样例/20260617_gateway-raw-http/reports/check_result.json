@@ -1,0 +1,332 @@
+{
+  "task_dir": "甲方要求/甲方公司多模型比对/demo/20260617_gateway-raw-http",
+  "ok": false,
+  "counts": {
+    "pass": 42,
+    "fail": 2,
+    "warn": 1,
+    "skip": 4
+  },
+  "items": [
+    {
+      "id": "file:README.md",
+      "category": "package",
+      "label": "存在 README.md",
+      "status": "pass",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "id": "file:manifest.json",
+      "category": "package",
+      "label": "存在 manifest.json",
+      "status": "pass",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "id": "file:instruction.md",
+      "category": "package",
+      "label": "存在 instruction.md",
+      "status": "pass",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "id": "file:task.toml",
+      "category": "package",
+      "label": "存在 task.toml",
+      "status": "pass",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "id": "file:meta.json",
+      "category": "package",
+      "label": "存在 meta.json",
+      "status": "pass",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "id": "file:environment/Dockerfile",
+      "category": "package",
+      "label": "存在 environment/Dockerfile",
+      "status": "pass",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "id": "file:environment/workspace",
+      "category": "package",
+      "label": "存在 environment/workspace",
+      "status": "pass",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "id": "file:environment/workspace.tar.gz",
+      "category": "package",
+      "label": "存在 environment/workspace.tar.gz",
+      "status": "pass",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "id": "file:tests/test.sh",
+      "category": "package",
+      "label": "存在 tests/test.sh",
+      "status": "pass",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "id": "file:tests/test_outputs.py",
+      "category": "package",
+      "label": "存在 tests/test_outputs.py",
+      "status": "pass",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "id": "file:rubrics/task_rubric.yaml",
+      "category": "package",
+      "label": "存在 rubrics/task_rubric.yaml",
+      "status": "pass",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "id": "file:agents/main_agent.json",
+      "category": "package",
+      "label": "存在 agents/main_agent.json",
+      "status": "pass",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "id": "file:agents/subagent.json",
+      "category": "package",
+      "label": "存在 agents/subagent.json",
+      "status": "pass",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "id": "ground_truth:content",
+      "category": "ground_truth",
+      "label": "ground_truth/ 含答案文件",
+      "status": "pass",
+      "detail": "",
+      "severity": "warn"
+    },
+    {
+      "id": "meta:one_liner",
+      "category": "meta",
+      "label": "meta.one_liner 已填写",
+      "status": "pass",
+      "detail": "",
+      "severity": "warn"
+    },
+    {
+      "id": "meta:labels",
+      "category": "meta",
+      "label": "meta.labels 已填写",
+      "status": "pass",
+      "detail": "",
+      "severity": "warn"
+    },
+    {
+      "id": "meta:annotator_background",
+      "category": "meta",
+      "label": "meta.annotator_background 已填写",
+      "status": "pass",
+      "detail": "",
+      "severity": "warn"
+    },
+    {
+      "id": "meta:bg_industry",
+      "category": "meta",
+      "label": "annotator_background.industry",
+      "status": "pass",
+      "detail": "",
+      "severity": "warn"
+    },
+    {
+      "id": "meta:bg_role",
+      "category": "meta",
+      "label": "annotator_background.role",
+      "status": "pass",
+      "detail": "",
+      "severity": "warn"
+    },
+    {
+      "id": "model:qwen-3.7-max",
+      "category": "models",
+      "label": "trajectories/qwen-3.7-max/ 存在",
+      "status": "pass",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "id": "traj:claude-opus-4-8:session.jsonl",
+      "category": "trajectory",
+      "label": "claude-opus-4-8: session.jsonl",
+      "status": "pass",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "id": "traj:claude-opus-4-8:agent_config_snapshot.json",
+      "category": "trajectory",
+      "label": "claude-opus-4-8: agent_config_snapshot.json",
+      "status": "pass",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "id": "traj:claude-opus-4-8:trajectory.json",
+      "category": "trajectory",
+      "label": "claude-opus-4-8: trajectory.json",
+      "status": "pass",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "id": "traj:claude-opus-4-8:assistant_turns",
+      "category": "trajectory",
+      "label": "claude-opus-4-8: assistant 轮次 ≥ 20",
+      "status": "pass",
+      "detail": "jsonl 统计 96 轮；trajectory.json 记录 96",
+      "severity": "info"
+    },
+    {
+      "id": "traj:claude-opus-4-8:final_workspace_optional",
+      "category": "trajectory",
+      "label": "claude-opus-4-8: final_workspace.tar.gz 可选调试附件",
+      "status": "skip",
+      "detail": "未提供；不影响交付",
+      "severity": "info"
+    },
+    {
+      "id": "traj:glm-5.2:session.jsonl",
+      "category": "trajectory",
+      "label": "glm-5.2: session.jsonl",
+      "status": "pass",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "id": "traj:glm-5.2:agent_config_snapshot.json",
+      "category": "trajectory",
+      "label": "glm-5.2: agent_config_snapshot.json",
+      "status": "pass",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "id": "traj:glm-5.2:trajectory.json",
+      "category": "trajectory",
+      "label": "glm-5.2: trajectory.json",
+      "status": "pass",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "id": "traj:glm-5.2:assistant_turns",
+      "category": "trajectory",
+      "label": "glm-5.2: assistant 轮次 ≥ 20",
+      "status": "pass",
+      "detail": "jsonl 统计 85 轮；trajectory.json 记录 85",
+      "severity": "info"
+    },
+    {
+      "id": "traj:glm-5.2:final_workspace_optional",
+      "category": "trajectory",
+      "label": "glm-5.2: final_workspace.tar.gz 可选调试附件",
+      "status": "skip",
+      "detail": "未提供；不影响交付",
+      "severity": "info"
+    },
+    {
+      "id": "traj:qwen-3.7-max:session.jsonl",
+      "category": "trajectory",
+      "label": "qwen-3.7-max: session.jsonl",
+      "status": "pass",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "id": "traj:qwen-3.7-max:agent_config_snapshot.json",
+      "category": "trajectory",
+      "label": "qwen-3.7-max: agent_config_snapshot.json",
+      "status": "pass",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "id": "traj:qwen-3.7-max:trajectory.json",
+      "category": "trajectory",
+      "label": "qwen-3.7-max: trajectory.json",
+      "status": "pass",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "id": "traj:qwen-3.7-max:assistant_turns",
+      "category": "trajectory",
+      "label": "qwen-3.7-max: assistant 轮次 ≥ 20",
+      "status": "pass",
+      "detail": "jsonl 统计 107 轮；trajectory.json 记录 107",
+      "severity": "info"
+    },
+    {
+      "id": "traj:qwen-3.7-max:final_workspace_optional",
+      "category": "trajectory",
+      "label": "qwen-3.7-max: final_workspace.tar.gz 可选调试附件",
+      "status": "skip",
+      "detail": "未提供；不影响交付",
+      "severity": "info"
+    },
+    {
+      "id": "traj:qwen-3.7-max:subagents_expected",
+      "category": "trajectory",
+      "label": "qwen-3.7-max: 检测到 Task/Agent/delegate_task 委派，应有 subagent 轨迹",
+      "status": "pass",
+      "detail": "已归档 1 个 subagent jsonl",
+      "severity": "warn"
+    },
+    {
+      "id": "traj:qwen-3.7-max:sub:explorer-001.jsonl",
+      "category": "trajectory",
+      "label": "qwen-3.7-max: subagents/explorer-001.jsonl 非空",
+      "status": "pass",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "id": "report:eval:claude-opus-4-8",
+      "category": "reports",
+      "label": "reports/claude-opus-4-8/a4d11c0c-9b8d-4c9f-9e33-525d187969b7/eval_result.json",
+      "status": "pass",
+      "detail": "",
+      "severity": "warn"
+    },
+    {
+      "id": "report:eval:glm-5.2",
+      "category": "reports",
+      "label": "reports/glm-5.2/20687f9d-402b-468b-9735-12f0c6575aaa/eval_result.json",
+      "status": "pass",
+      "detail": "",
+      "severity": "warn"
+    },
+    {
+      "id": "report:eval:qwen-3.7-max",
+      "category": "reports",
+      "label": "reports/qwen-3.7-max/26806b32-4b84-48be-be12-403d9f5c94c3/eval_result.json",
+      "status": "pass",
+      "detail": "",
+      "severity": "warn"
+    }
+  ]
+}

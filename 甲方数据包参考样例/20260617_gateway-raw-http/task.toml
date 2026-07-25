@@ -1,0 +1,23 @@
+version = "1.0"
+
+[metadata]
+author_name = "harbor-annotator"
+author_email = "annotator@example.com"
+difficulty = "hard"
+category = "software-engineering"
+code_lang = "python"
+rubric_task_type = "code_generation"
+label_task_types = ["feature"]
+application = ["Backend_Infrastructure"]
+
+[verifier]
+timeout_sec = 300.0
+
+[agent]
+timeout_sec = 3600.0
+
+[environment]
+build_timeout_sec = 600.0
+cpus = 1
+memory = "2G"
+storage = "10G"

@@ -1,0 +1,114 @@
+{
+  "collected_at": "2026-06-17T15:51:51.208179",
+  "phase": "trajectory_collected",
+  "stage": "models-4of4-human-reviewed-runtime-config-captured",
+  "task_id": "20260617_gateway-raw-http",
+  "bundle_name": "qwen-bench-20260617",
+  "baseline_path": "multi_model_compare/repo/gateway",
+  "baseline_commit": "99392a22e45bf36a2c4dc761747bd19764f0319d",
+  "stats": {
+    "workspace_files": 34
+  },
+  "ground_truth": {
+    "collected_at": "2026-06-17T15:51:51.208179",
+    "baseline_commit": "99392a22e45bf36a2c4dc761747bd19764f0319d",
+    "gt_workdir": "workspace_env/repo/gateway",
+    "files_copied": [
+      "CLAUDE.md",
+      "gateway/app.py",
+      "gateway/proxy.py",
+      "gateway/raw_http_log.py",
+      "scripts/raw_to_sharegpt.py"
+    ],
+    "patch": "20260617_gateway-raw-http/ground_truth/ground_truth.patch",
+    "eval_verified": true,
+    "eval_verified_at": "2026-06-17T17:00:00+08:00",
+    "eval_verified_note": "gt-verify-001 stdout 8/8 acceptance 通过；按 SOP §Phase 5 / SKILL §B3 人工把 reward=1 / eval_pass=true 写入 eval_result.json。"
+  },
+  "models_collected": [
+    "claude-opus-4-8",
+    "qwen-3.7-max",
+    "glm-5.2"
+  ],
+  "incomplete_models": [],
+  "agreement_score_status": "complete",
+  "last_trajectory": {
+    "model_id": "claude-opus-4-8",
+    "session_id": "a4d11c0c-9b8d-4c9f-9e33-525d187969b7",
+    "collected_at": "2026-06-17T18:47:16.151735"
+  },
+  "notes": [
+    "Opus trajectory is marked by actual collected model claude-opus-4-8.",
+    "Runtime system prompt and tool definitions are filled from user-supplied Claude Code Gateway capture request_id 2d593910abc6fcc7724ed6dbd5f3866b."
+  ],
+  "model_substitution": {
+    "requested_model": "claude-opus-4.6",
+    "actual_collected_model": "claude-opus-4-8",
+    "reason": "claude-opus-4.6 unavailable; package marks the collected Opus trajectory as claude-opus-4-8"
+  },
+  "models": [
+    {
+      "model_id": "claude-opus-4-8",
+      "session_id": "a4d11c0c-9b8d-4c9f-9e33-525d187969b7",
+      "eval_pass": true,
+      "turns": 96,
+      "has_subagent": false,
+      "subagent_files": [],
+      "trajectory_dir": "trajectories/claude-opus-4-8",
+      "eval_report": "reports/claude-opus-4-8/a4d11c0c-9b8d-4c9f-9e33-525d187969b7/eval_result.json",
+      "rubric_report": "reports/claude-opus-4-8/a4d11c0c-9b8d-4c9f-9e33-525d187969b7/rubric_scores.json",
+      "reward": "1",
+      "weighted_total": 4.2
+    },
+    {
+      "model_id": "qwen-3.7-max",
+      "runtime_model": "qwen-3.7-max",
+      "session_id": "26806b32-4b84-48be-be12-403d9f5c94c3",
+      "eval_pass": true,
+      "turns": 107,
+      "has_subagent": true,
+      "subagent_files": [
+        "subagents/explorer-001.jsonl"
+      ],
+      "trajectory_dir": "trajectories/qwen-3.7-max",
+      "eval_report": "reports/qwen-3.7-max/26806b32-4b84-48be-be12-403d9f5c94c3/eval_result.json",
+      "rubric_report": "reports/qwen-3.7-max/26806b32-4b84-48be-be12-403d9f5c94c3/rubric_scores.json",
+      "reward": "1",
+      "weighted_total": 3.9
+    },
+    {
+      "model_id": "glm-5.2",
+      "runtime_model": "glm-5.2",
+      "session_id": "20687f9d-402b-468b-9735-12f0c6575aaa",
+      "eval_pass": true,
+      "turns": 85,
+      "has_subagent": false,
+      "subagent_files": [],
+      "trajectory_dir": "trajectories/glm-5.2",
+      "eval_report": "reports/glm-5.2/20687f9d-402b-468b-9735-12f0c6575aaa/eval_result.json",
+      "rubric_report": "reports/glm-5.2/20687f9d-402b-468b-9735-12f0c6575aaa/rubric_scores.json",
+      "reward": "1",
+      "weighted_total": 4.3
+    }
+  ],
+  "agreement_score": 0.909,
+  "agreement_score_method": "pearson_r_over_model_dimension_scores_auto_audit_vs_rony_review",
+  "runtime_config_capture_status": "captured",
+  "human_review": {
+    "status": "complete",
+    "reviewer": "rony",
+    "reviewed_at": "2026-06-17T20:30:00+08:00",
+    "agreement_scope": "assistant_static_dynamic_audit_vs_rony_human_review; not two independent human reviewers"
+  },
+  "runtime_config_capture_source": {
+    "source_type": "gateway_capture",
+    "capture_version": "go-raw-v1",
+    "product": "claude-code",
+    "request_id": "2d593910abc6fcc7724ed6dbd5f3866b",
+    "session_id": "4c2fd227-d5d8-41e4-95ec-ed6e8f9498ba",
+    "timestamp": "2026-05-21T05:54:08.201094939Z",
+    "upstream_model": "claude-opus-4-7-think",
+    "body_path": "upstream.request_body.body_raw_json",
+    "note": "Captured from Claude Code Gateway request payload supplied by user; shared across task/model trajectory snapshots per user instruction."
+  }
+}

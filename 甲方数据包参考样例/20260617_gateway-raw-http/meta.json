@@ -1,0 +1,66 @@
+{
+  "task_id": "20260617_gateway-raw-http",
+  "rubric_task_type": "code_generation",
+  "labels": {
+    "code_lang": "python",
+    "task_type": [
+      "feature"
+    ],
+    "application": [
+      "Backend_Infrastructure"
+    ]
+  },
+  "user_spec": "specific",
+  "verifiable": true,
+  "difficulty": "hard",
+  "tags": [
+    "python",
+    "fastapi",
+    "gateway",
+    "trace",
+    "sharegpt"
+  ],
+  "one_liner": "为 LLM 代理网关增加原始 HTTP 全链路日志与 ShareGPT 轨迹导出，考察代理中间件设计与 session 级 trace 归档。",
+  "annotator_background": {
+    "industry": "算法工程",
+    "years_experience": 13,
+    "role": "技术经理"
+  },
+  "completion_time_min": 8.5,
+  "avg_turns_annotator": 40,
+  "agreement_score": 0.909,
+  "agreement_score_status": "complete",
+  "agreement_notes": "双人工评审待第二人到位；当前为单 AI 自动评审（agent-static-dynamic-audit）。",
+  "stage": "models-4of4-human-reviewed-runtime-config-captured",
+  "incomplete_models": [],
+  "runtime_model_notes": {
+    "claude-opus-4.6": "会话实际运行 claude-opus-4-8，包内目录按 op.md 使用 claude-opus-4.6"
+  },
+  "dataset": "harbor-benchmark",
+  "split": "test",
+  "quality_gate_status": "not_applicable_single_run_per_model",
+  "completion_time_scope": "ground_truth_and_annotation_minutes",
+  "human_difficulty_assessment": {
+    "estimated_minutes": 180,
+    "difficulty_reason_zh": "需要同时理解 Anthropic 兼容网关、raw HTTP 请求落盘、ShareGPT 转换脚本和 pytest 验收契约；实现面不算大，但边界在日志脱敏、格式保真和多文件联动，标注者需要反复运行测试确认。",
+    "annotator_role": "senior backend/data collection reviewer",
+    "reviewer": "rony"
+  },
+  "model_notes": {
+    "claude-opus-4-8": "Originally requested claude-opus-4.6 was unavailable; actual collected Opus trajectory is marked claude-opus-4-8."
+  },
+  "runtime_config_capture_status": "captured",
+  "agreement_score_method": "pearson_r_over_model_dimension_scores_auto_audit_vs_rony_review",
+  "agreement_score_note": "Agreement is between the previous assistant static/dynamic audit and rony human review; it is not a two-independent-human agreement score.",
+  "runtime_config_capture_source": {
+    "source_type": "gateway_capture",
+    "capture_version": "go-raw-v1",
+    "product": "claude-code",
+    "request_id": "2d593910abc6fcc7724ed6dbd5f3866b",
+    "session_id": "4c2fd227-d5d8-41e4-95ec-ed6e8f9498ba",
+    "timestamp": "2026-05-21T05:54:08.201094939Z",
+    "upstream_model": "claude-opus-4-7-think",
+    "body_path": "upstream.request_body.body_raw_json",
+    "note": "Captured from Claude Code Gateway request payload supplied by user; shared across task/model trajectory snapshots per user instruction."
+  }
+}

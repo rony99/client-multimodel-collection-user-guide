@@ -1,0 +1,33 @@
+# Demo config for the local mock upstream.
+# Used by examples/run_local.sh.
+
+server:
+  host: 127.0.0.1
+  port: 9000
+  log_level: INFO
+
+log:
+  dir: ./gateway_logs
+
+upstreams:
+  - name: openai-mock
+    style: openai
+    base_url: http://127.0.0.1:9100
+    api_key: mock-key
+    timeout_seconds: 10
+
+  - name: anthropic-mock
+    style: anthropic
+    base_url: http://127.0.0.1:9100
+    api_key: mock-key
+    timeout_seconds: 10
+    version: "2023-06-01"
+
+routes:
+  - model_id: gpt-4o
+    upstream: openai-mock
+    upstream_model: gpt-4o-demo
+
+  - model_id: claude-3-5-sonnet
+    upstream: anthropic-mock
+    upstream_model: claude-3-5-sonnet-demo

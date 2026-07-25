@@ -1,0 +1,44 @@
+# Example config for lightweight-gateway.
+# Copy to ./config.yaml, fill in your upstream credentials, then run:
+#   lightweight-gateway -c config.yaml
+#
+# Environment variable interpolation: ${VAR} and ${VAR:-default}.
+
+server:
+  host: 0.0.0.0
+  port: 9000
+  log_level: INFO
+
+log:
+  # Logs go to <dir>/<project_id>/<session_id>/completions.jsonl + meta.json
+  dir: ./logs
+  queue_size: 1024   # reserved for v2+ async writer; ignored in v1
+
+upstreams:
+  - name: openai-primary
+    style: openai            # openai | anthropic
+    base_url: https://api.openai.com/v1
+    api_key: ${OPENAI_API_KEY}
+    timeout_seconds: 60
+
+  - name: anthropic-primary
+    style: anthropic
+    base_url: https://api.anthropic.com
+    api_key: ${ANTHROPIC_API_KEY}
+    timeout_seconds: 60
+    version: 2023-06-01       # Anthropic requires this header
+
+routes:
+  # Agent sends model_id=gpt-4o → routed to openai-primary,
+  # upstream model is rewritten to gpt-4o-2024-08-06.
+  - model_id: gpt-4o
+    upstream: openai-primary
+    upstream_model: gpt-4o-2024-08-06
+
+  - model_id: gpt-4o-mini
+    upstream: openai-primary
+    # No upstream_model → request's "model" is forwarded as-is.
+
+  - model_id: claude-3-5-sonnet
+    upstream: anthropic-primary
+    upstream_model: claude-3-5-sonnet-20241022

@@ -1,0 +1,31 @@
+# 单题 Rubric — gateway 原始 HTTP 轨迹（code_generation）
+# Schema key 保持英文；判别标准条目使用中文。
+
+global_rubric_ref:
+  source: "global_rubric.yaml"
+  op_md_source: "../../../op.md"
+  name: "code-agent-rubrics"
+  version: "1.0.0"
+
+task_id: "20260617_gateway-raw-http"
+task_type: "code_generation"
+
+task_specific_criteria:
+  correctness:
+    - "自动判题通过：tests/acceptance/test_raw_http_trace.py 全部通过（reward=1）"
+    - "实时代理请求产生含请求/响应头的原始日志，按 session_id 分目录存储"
+    - "raw_to_sharegpt.py 对 fixture 产出有序的人类/助手多轮对话"
+  code_quality:
+    - "接入现有 gateway/app.py 代理链路，不破坏 completions.jsonl 既有行为"
+    - "敏感请求头（如 authorization）有脱敏或文档说明"
+    - "模块与脚本命名清晰（raw_http_log.py、raw_to_sharegpt.py）"
+  reasoning:
+    - "区分「解析后的 body 日志」与「完整原始 HTTP 轨迹」两类需求"
+    - "理解 URL 中 session_id 查询参数对未传 header 的 agent 的分组意义"
+  tool_usage:
+    - "阅读 tests/fixtures/raw_http_demo-sess-001.jsonl 理解目标格式"
+    - "用 pytest 与 mock 上游验证，而非仅手工 curl"
+  efficiency:
+    - "转换脚本可独立命令行运行，无需每次启动完整 gateway"
+
+# 权重：code_generation（correctness 0.35, code_quality 0.25, reasoning 0.15, tool_usage 0.10, efficiency 0.15）

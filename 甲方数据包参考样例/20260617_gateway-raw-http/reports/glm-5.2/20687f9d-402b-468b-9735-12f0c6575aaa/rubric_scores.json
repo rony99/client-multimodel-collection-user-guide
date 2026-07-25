@@ -1,0 +1,150 @@
+{
+  "task_id": "20260617_gateway-raw-http",
+  "model_id": "glm-5.2",
+  "session_id": "20687f9d-402b-468b-9735-12f0c6575aaa",
+  "run_index": 1,
+  "rubric_version": "1.0.0",
+  "rubric_task_type": "code_generation",
+  "reviewer": "rony",
+  "reviewed_at": "2026-06-17T20:30:00+08:00",
+  "eval_pass": true,
+  "turns": 85,
+  "weights": {
+    "correctness": 0.35,
+    "code_quality": 0.25,
+    "reasoning": 0.15,
+    "tool_usage": 0.1,
+    "efficiency": 0.15
+  },
+  "scores": {
+    "correctness": 5,
+    "code_quality": 5,
+    "reasoning": 4,
+    "tool_usage": 4,
+    "efficiency": 2
+  },
+  "weighted_total": 4.3,
+  "dynamic_verification": {
+    "harbor_docker_eval_exit": 0,
+    "acceptance_pytest": "8 passed, 0 failed",
+    "session_duration_min": 31.7,
+    "web_search_for_sharegpt": false,
+    "web_fetch_for_sharegpt": false,
+    "workspace_source": "workspace_env/repo/gateway"
+  },
+  "trajectory_audit": {
+    "claude_session": "20687f9d-402b-468b-9735-12f0c6575aaa",
+    "claude_project": "workspace-env-repo-gateway",
+    "tool_invocations": {
+      "Bash": 15,
+      "Read": 17,
+      "Write": 2,
+      "Edit": 20,
+      "TaskCreate": 6,
+      "TaskUpdate": 12,
+      "Task": 0,
+      "Glob": 0,
+      "Grep": 0,
+      "WebSearch": 0,
+      "WebFetch": 0
+    },
+    "sharegpt_format_source": [
+      "tests/acceptance/test_raw_http_trace.py（test_sharegpt_converter_cli_runs_on_fixture 等断言 conversations/from+value）",
+      "tests/fixtures/raw_http_demo-sess-001.jsonl",
+      "TASK.md"
+    ],
+    "web_search_verdict": "未调用 Web Search / Web Fetch 查询 ShareGPT 公开规范；从 acceptance 契约与 fixture 反推 human/gpt 字段与排序逻辑；额外加 system/tool/function 角色映射（_ROLE_TO_FROM），与 fixture 行为一致",
+    "sensitive_header_redaction": "_REDACT_HEADERS = {authorization, proxy-authorization, x-api-key, cookie, set-cookie}；写盘前 redact_headers() 替换为 <redacted>；关键能力高于 Sonnet 实现"
+  },
+  "dimension_notes": {
+    "correctness": {
+      "score": 5,
+      "label": "优秀",
+      "evidence": [
+        "Harbor eval_exit_code=0，8/8 acceptance 通过",
+        "gateway/raw_http_log.py 与 scripts/raw_to_sharegpt.py 均在位",
+        "实时代理产生 raw_http.jsonl，按 ?session_id= + project_id 分目录；session/subagent 命名通过"
+      ],
+      "task_criteria_met": [
+        "自动判题通过",
+        "原始 HTTP 日志完整",
+        "ShareGPT 转换正确"
+      ]
+    },
+    "code_quality": {
+      "score": 5,
+      "label": "优秀",
+      "evidence": [
+        "正面：raw_http_log 模块文档详尽，区分与 writer.py (lossy) 的边界",
+        "正面：_REDACT_HEADERS + redact_headers 实现敏感头脱敏（authorization/cookie 等写盘前替换为 <redacted>）",
+        "正面：_resolve_raw_http_dir 统一处理 env / config 两种来源；app.py 生命周期收尾调用 raw_logger.close()",
+        "正面：_ROLE_TO_FROM 把 system/tool/function 也映射进 ShareGPT 角色，扩展性良好",
+        "正面：SSE 流式响应额外保留 raw 字段，符合「完整原始 HTTP」要求"
+      ],
+      "task_criteria_met": [
+        "代理链路接入",
+        "敏感头脱敏（落地实现）",
+        "命名清晰 / 模块边界合理"
+      ]
+    },
+    "reasoning": {
+      "score": 4,
+      "label": "良好",
+      "evidence": [
+        "正面：明确区分 CompletionRecord（lossy）与 raw HTTP log（envelope），文档化两类需求",
+        "正面：理解 session_id 查询参数对未传 header agent 的分组意义；按 project_id/session_id 嵌套目录",
+        "正面：ShareGPT 重建逻辑处理『请求带全量 history』的常见行为，逐轮剥离 tail"
+      ],
+      "task_criteria_met": [
+        "两类日志需求理解",
+        "session_id 分组意义把握",
+        "重建逻辑稳健"
+      ]
+    },
+    "tool_usage": {
+      "score": 4,
+      "label": "良好",
+      "evidence": [
+        "正面：先 Read acceptance 测试、fixture、app/proxy/session/writer 再实现",
+        "正面：Edit 调用 20 次（精细迭代）；TaskCreate/TaskUpdate 自管理 18 次",
+        "正面：Bash 跑 acceptance + 全量单元测试验证无回归",
+        "审查结论：0 次 WebSearch/WebFetch；ShareGPT 格式完全从 acceptance 断言与 fixture 推断——对本题是正确路径"
+      ],
+      "task_criteria_met": [
+        "阅读 fixture 理解目标格式",
+        "pytest + mock 上游验证",
+        "未依赖外网检索"
+      ]
+    },
+    "efficiency": {
+      "score": 3,
+      "label": "及格",
+      "evidence": [
+        "85 assistant 轮次，~31.7 分钟（08:46–09:17 UTC），单次最长",
+        "Edit 20 次表明多轮小步迭代，对质量有益但拉长耗时",
+        "最终一次实现全绿，无显著回滚；CLI 独立可用"
+      ],
+      "task_criteria_met": [
+        "轮次偏多",
+        "CLI 可独立运行"
+      ]
+    }
+  },
+  "summary_zh": "执行完全达标（reward=1）。代码层超越 Sonnet：实现了敏感头脱敏（authorization/cookie 等）、SSE 流原始字段、project_id/session_id 二级目录、ShareGPT 多角色映射。轨迹审查：未外查 ShareGPT 规范，从 acceptance + fixture 推断——符合 TDD 设计。轮次偏多。综合加权 4.55/5。",
+  "auto_review": {
+    "reviewer": "agent-static-dynamic-audit",
+    "scores": {
+      "correctness": 5,
+      "code_quality": 5,
+      "reasoning": 4,
+      "tool_usage": 4,
+      "efficiency": 3
+    },
+    "weighted_total": 4.55
+  },
+  "review_status": "human_reviewed",
+  "human_review_note_zh": "实现质量最好，但 85 轮仍偏长，人工复核对效率比临时评分更严格。",
+  "agreement_score_status": "complete",
+  "agreement_score_method": "same_model_dimension_exact_match_rate_auto_vs_rony",
+  "agreement_score": 0.8
+}

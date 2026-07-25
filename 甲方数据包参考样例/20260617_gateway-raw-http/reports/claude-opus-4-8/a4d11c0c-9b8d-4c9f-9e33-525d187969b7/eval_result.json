@@ -1,0 +1,10 @@
+{
+  "model_id": "claude-opus-4-8",
+  "session_id": "a4d11c0c-9b8d-4c9f-9e33-525d187969b7",
+  "eval_exit_code": 0,
+  "reward": "1",
+  "eval_pass": true,
+  "source": "trajectory_summary",
+  "note": "Backfilled from existing trajectory/rubric records; no rerun performed in this cleanup step.",
+  "requested_model_note": "original requested slot claude-opus-4.6 was unavailable; actual collected model is claude-opus-4-8"
+}

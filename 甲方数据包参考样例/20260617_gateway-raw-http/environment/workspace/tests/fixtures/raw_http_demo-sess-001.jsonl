@@ -1,0 +1,60 @@
+[
+  {
+    "timestamp": "2026-06-17T10:00:00.000Z",
+    "direction": "request",
+    "method": "POST",
+    "url": "http://127.0.0.1:9100/v1/chat/completions?session_id=demo-sess-001",
+    "headers": {
+      "content-type": "application/json",
+      "authorization": "Bearer mock-key",
+      "x-request-id": "req-1"
+    },
+    "body": {
+      "model": "gpt-4o",
+      "messages": [
+        {"role": "user", "content": "Say hi"}
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-17T10:00:00.500Z",
+    "direction": "response",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "x-upstream-trace": "up-1"
+    },
+    "body": {
+      "choices": [{"message": {"role": "assistant", "content": "Hello from mock!"}}],
+      "usage": {"prompt_tokens": 5, "completion_tokens": 3, "total_tokens": 8}
+    }
+  },
+  {
+    "timestamp": "2026-06-17T10:00:01.000Z",
+    "direction": "request",
+    "method": "POST",
+    "url": "http://127.0.0.1:9100/v1/chat/completions?session_id=demo-sess-001",
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "model": "gpt-4o",
+      "messages": [
+        {"role": "user", "content": "Say hi"},
+        {"role": "assistant", "content": "Hello from mock!"},
+        {"role": "user", "content": "Thanks"}
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-06-17T10:00:01.400Z",
+    "direction": "response",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "choices": [{"message": {"role": "assistant", "content": "You're welcome!"}}]
+    }
+  }
+]

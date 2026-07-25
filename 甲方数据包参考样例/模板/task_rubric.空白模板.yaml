@@ -1,0 +1,33 @@
+# =============================================================================
+# 单题 Rubric 空白模板（来源：甲方原始要求 Annotation Guidelines）
+# 复制为 rubrics/task_rubric.yaml 后按题填写。
+# - 各维度 task_specific_criteria 必须是非空列表
+# - code_qa 才需要 explanation
+# - correctness 文字不能与 test.sh 结论冲突
+# =============================================================================
+
+task_id: "<与任务目录名一致>"
+task_type: "<code_generation|bug_fix|code_qa|refactor>"
+
+task_specific_criteria:
+  correctness:
+    - "<本题正确性要点 1：最好能对应到测试>"
+    - "<本题正确性要点 2>"
+  code_quality:
+    - "<本题代码质量要点>"
+  reasoning:
+    - "<本题推理/分析要点>"
+  tool_usage:
+    - "<本题工具使用要点>"
+  efficiency:
+    - "<本题效率要点>"
+  # explanation:   # 仅 code_qa
+  #   - "<解释质量要点>"
+
+# 可选：覆盖该题维度权重
+# override_weights:
+#   correctness: 0.50
+#   code_quality: 0.20
+#   reasoning: 0.10
+#   tool_usage: 0.10
+#   efficiency: 0.10

@@ -1,0 +1,304 @@
+diff --git a/CLAUDE.md b/CLAUDE.md
+index 1936d61..a84aa7d 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -62,6 +62,15 @@ mmx search query --q "FastAPI streaming SSE response format" --output json
+ 
+ Parse the JSON from stdout. If `mmx` is missing, ask the user to install it and set `MINIMAX_API_KEY`.
+ 
++## Raw HTTP trace logging
++
++In addition to parsed `completions.jsonl` trajectory records, the gateway can write **full upstream HTTP request/response logs including headers** via `gateway/raw_http_log.py` (`RawHttpLogger`).
++
++- Enable with env var `GATEWAY_RAW_HTTP_DIR` (directory root for raw logs).
++- Logs are grouped by `session_id` from the URL query param `?session_id=` (also supports session headers).
++- Each session writes `{GATEWAY_RAW_HTTP_DIR}/{session_id}/raw_http.jsonl`.
++- Convert raw logs to ShareGPT JSONL: `python scripts/raw_to_sharegpt.py <raw_log> -o out.sharegpt.jsonl`.
++
+ ## Secrets
+ 
+ - Never commit `.env` or `config.yaml` with real API keys (see `.gitignore`).
+diff --git a/gateway/app.py b/gateway/app.py
+index 35c2e42..75c0d39 100644
+--- a/gateway/app.py
++++ b/gateway/app.py
+@@ -17,6 +17,7 @@ from fastapi import FastAPI
+ 
+ from .config import GatewayConfig
+ from .proxy import router as proxy_router
++from .raw_http_log import RawHttpLogger
+ from .routing import Router
+ from .upstream import UpstreamPool
+ from .writer import TrajectoryWriter
+@@ -32,6 +33,7 @@ class GatewayState:
+     router: Router
+     pool: UpstreamPool
+     writer: TrajectoryWriter
++    raw_http_logger: RawHttpLogger
+ 
+ 
+ def create_app(config: GatewayConfig) -> FastAPI:
+@@ -39,6 +41,7 @@ def create_app(config: GatewayConfig) -> FastAPI:
+     log_dir = Path(config.log.dir).expanduser().resolve()
+     pool = UpstreamPool(config.upstreams)
+     writer = TrajectoryWriter(log_dir)
++    raw_http_logger = RawHttpLogger()
+     router = Router(
+         routes=[r.model_dump() for r in config.routes],
+         upstream_names=config.upstream_names(),
+@@ -48,7 +51,11 @@ def create_app(config: GatewayConfig) -> FastAPI:
+     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+         log_dir.mkdir(parents=True, exist_ok=True)
+         app.state.gateway = GatewayState(
+-            config=config, router=router, pool=pool, writer=writer
++            config=config,
++            router=router,
++            pool=pool,
++            writer=writer,
++            raw_http_logger=raw_http_logger,
+         )
+         logger.info(
+             "Gateway ready: %d upstream(s), %d route(s), log_dir=%s",
+diff --git a/gateway/proxy.py b/gateway/proxy.py
+index aadde8f..716caf0 100644
+--- a/gateway/proxy.py
++++ b/gateway/proxy.py
+@@ -253,6 +253,15 @@ async def _proxy_non_streaming(
+     started: float,
+ ) -> Response:
+     record_seq = await state.writer.next_sequence(project_id, session_id)  # type: ignore[attr-defined]
++    raw_logger = state.raw_http_logger  # type: ignore[attr-defined]
++    if raw_logger.enabled:
++        raw_logger.log_request(
++            session_id=session_id,
++            method=request.method,
++            url=str(request.url),
++            headers=dict(request.headers),
++            body=request_body,
++        )
+     try:
+         upstream_resp = await upstream.send(upstream_req, stream=False)
+     except Exception as exc:  # network / timeout
+@@ -296,6 +305,14 @@ async def _proxy_non_streaming(
+     )
+     await state.writer.append(record)
+ 
++    if raw_logger.enabled:
++        raw_logger.log_response(
++            session_id=session_id,
++            status=upstream_resp.status_code,
++            headers=dict(upstream_resp.headers),
++            body=response_json if response_json is not None else response_bytes.decode("utf-8", errors="replace"),
++        )
++
+     # Strip hop-by-hop from the upstream response before sending back.
+     resp_headers = {
+         k: v for k, v in upstream_resp.headers.items() if k.lower() not in _HOP_BY_HOP
+diff --git a/gateway/raw_http_log.py b/gateway/raw_http_log.py
+new file mode 100644
+index 0000000..5da0121
+--- /dev/null
++++ b/gateway/raw_http_log.py
+@@ -0,0 +1,86 @@
++"""Append-only raw HTTP request/response logger grouped by session_id."""
++
++from __future__ import annotations
++
++import json
++import os
++from datetime import datetime, timezone
++from pathlib import Path
++from typing import Any
++
++from .session import is_valid_session_id
++
++
++def _utcnow_iso() -> str:
++    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
++
++
++def _normalize_headers(headers: dict[str, Any]) -> dict[str, str]:
++    return {str(k).lower(): str(v) for k, v in headers.items()}
++
++
++class RawHttpLogger:
++    """Write full HTTP request/response records (including headers) per session."""
++
++    def __init__(self, base_dir: str | Path | None = None) -> None:
++        env_dir = os.environ.get("GATEWAY_RAW_HTTP_DIR", "").strip()
++        chosen = base_dir if base_dir is not None else env_dir
++        self.base_dir = Path(chosen).expanduser().resolve() if chosen else None
++
++    @property
++    def enabled(self) -> bool:
++        return self.base_dir is not None
++
++    def _log_path(self, session_id: str) -> Path:
++        if not self.base_dir or not is_valid_session_id(session_id):
++            raise ValueError(f"invalid session_id for raw log: {session_id!r}")
++        path = self.base_dir / session_id / "raw_http.jsonl"
++        path.parent.mkdir(parents=True, exist_ok=True)
++        return path
++
++    def _append(self, session_id: str, record: dict[str, Any]) -> None:
++        if not self.enabled:
++            return
++        path = self._log_path(session_id)
++        with path.open("a", encoding="utf-8") as fh:
++            fh.write(json.dumps(record, ensure_ascii=False) + "\n")
++
++    def log_request(
++        self,
++        *,
++        session_id: str,
++        method: str,
++        url: str,
++        headers: dict[str, Any],
++        body: Any,
++    ) -> None:
++        self._append(
++            session_id,
++            {
++                "timestamp": _utcnow_iso(),
++                "direction": "request",
++                "method": method,
++                "url": url,
++                "headers": _normalize_headers(headers),
++                "body": body,
++            },
++        )
++
++    def log_response(
++        self,
++        *,
++        session_id: str,
++        status: int,
++        headers: dict[str, Any],
++        body: Any,
++    ) -> None:
++        self._append(
++            session_id,
++            {
++                "timestamp": _utcnow_iso(),
++                "direction": "response",
++                "status": status,
++                "headers": _normalize_headers(headers),
++                "body": body,
++            },
++        )
+diff --git a/scripts/raw_to_sharegpt.py b/scripts/raw_to_sharegpt.py
+new file mode 100644
+index 0000000..5d1e67a
+--- /dev/null
++++ b/scripts/raw_to_sharegpt.py
+@@ -0,0 +1,110 @@
++#!/usr/bin/env python3
++"""Convert raw HTTP JSON logs to ShareGPT JSONL."""
++
++from __future__ import annotations
++
++import argparse
++import json
++from pathlib import Path
++from typing import Any
++
++
++def _load_records(path: Path) -> list[dict[str, Any]]:
++    text = path.read_text(encoding="utf-8").strip()
++    if not text:
++        return []
++    if text.startswith("["):
++        data = json.loads(text)
++        return data if isinstance(data, list) else [data]
++    records: list[dict[str, Any]] = []
++    for line in text.splitlines():
++        line = line.strip()
++        if line:
++            records.append(json.loads(line))
++    return records
++
++
++def _pair_request_response(records: list[dict[str, Any]]) -> list[tuple[dict, dict]]:
++    sorted_records = sorted(records, key=lambda r: r.get("timestamp", ""))
++    pairs: list[tuple[dict, dict]] = []
++    pending: dict[str, Any] | None = None
++    for rec in sorted_records:
++        direction = rec.get("direction")
++        if direction == "request":
++            pending = rec
++        elif direction == "response" and pending is not None:
++            pairs.append((pending, rec))
++            pending = None
++    return pairs
++
++
++def _extract_user_text(request_body: dict[str, Any]) -> str | None:
++    messages = request_body.get("messages") or []
++    user_parts = [m.get("content", "") for m in messages if m.get("role") == "user"]
++    if not user_parts:
++        return None
++    last = user_parts[-1]
++    return last if isinstance(last, str) else str(last)
++
++
++def _extract_assistant_text(response_body: dict[str, Any]) -> str | None:
++    choices = response_body.get("choices") or []
++    if not choices:
++        return None
++    message = choices[0].get("message") or {}
++    content = message.get("content")
++    if content is None:
++        return None
++    return content if isinstance(content, str) else str(content)
++
++
++def records_to_conversations(records: list[dict[str, Any]]) -> list[dict[str, str]]:
++    conversations: list[dict[str, str]] = []
++    for req, resp in _pair_request_response(records):
++        req_body = req.get("body") or {}
++        resp_body = resp.get("body") or {}
++        if not isinstance(req_body, dict):
++            req_body = {}
++        if not isinstance(resp_body, dict):
++            resp_body = {}
++
++        user_text = _extract_user_text(req_body)
++        if user_text:
++            conversations.append({"from": "human", "value": user_text})
++
++        assistant_text = _extract_assistant_text(resp_body)
++        if assistant_text:
++            conversations.append({"from": "gpt", "value": assistant_text})
++    return conversations
++
++
++def convert_file(input_path: Path) -> dict[str, Any]:
++    records = _load_records(input_path)
++    return {"conversations": records_to_conversations(records)}
++
++
++def main() -> int:
++    parser = argparse.ArgumentParser(description="Convert raw HTTP logs to ShareGPT JSONL")
++    parser.add_argument("input", type=Path, help="Raw HTTP log file (JSON array or JSONL)")
++    parser.add_argument("-o", "--output", type=Path, required=True, help="Output ShareGPT JSONL path")
++    parser.add_argument(
++        "--subagent-mode",
++        choices=["split", "merge"],
++        default="merge",
++        help="Optional subagent trace split (writes main output at minimum)",
++    )
++    args = parser.parse_args()
++
++    record = convert_file(args.input)
++    args.output.parent.mkdir(parents=True, exist_ok=True)
++    args.output.write_text(json.dumps(record, ensure_ascii=False) + "\n", encoding="utf-8")
++
++    if args.subagent_mode == "split" and args.output.parent.is_dir():
++        # v1: main trace only; subagent files use {session_id}-subid_{n} when present in input.
++        pass
++
++    return 0
++
++
++if __name__ == "__main__":
++    raise SystemExit(main())

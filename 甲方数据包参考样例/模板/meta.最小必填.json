@@ -1,0 +1,19 @@
+{
+  "task_id": "your_task_dir_name",
+  "rubric_task_type": "code_generation",
+  "labels": {
+    "code_lang": "python",
+    "task_type": ["feature"],
+    "application": ["Backend_Infrastructure"]
+  },
+  "tags": ["python", "your-stack", "feature"],
+  "one_liner": "一句话：这题做什么，以及为什么值得当作评测题。",
+  "difficulty": "hard",
+  "annotator_background": {
+    "industry": "你的行业",
+    "years_experience": 5,
+    "role": "你的岗位"
+  },
+  "completion_time_min": 120,
+  "agreement_score": 0.0
+}
