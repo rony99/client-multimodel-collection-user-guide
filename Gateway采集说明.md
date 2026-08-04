@@ -95,7 +95,7 @@ C: {}
    claude --settings <网关打印的 providers.claude.settings.json 绝对路径>
    ```
 
-5. 在 Claude 里发一条短指令（如 `ping，只回复 pong`），等模型有回复。  
+5. 在 Claude 里发一条**带独特探针码**的短指令（如含 `CCGW-SMOKE-88421`），等模型有回复。  
 6. **记下 Session ID 三处一致**：
 
    | 位置 | 应看到同一 UUID |
@@ -105,17 +105,25 @@ C: {}
    | 抓包 JSON 内字段 | 如带 `sessionId` 或请求头 `X-Claude-Code-Session-Id` |
 
    ```bash
-   # 示例：列出最新抓包会话目录
    ls -lt ~/.claude_lproxy/projects | head
-   # 目录内应有 *.json 调用落盘
    ls ~/.claude_lproxy/projects/<sessionId>/
    ```
 
-7. 换下一个 `active`：改 yaml → **重启 Gateway** → 新开 Claude（新 settings / 新 session）→ 再测一遍。
+7. **在 Gateway log 中确认「测过的内容」真的写进去了**（不要只看文件夹在）：
+
+   ```bash
+   # 搜索步骤 5 里你发的探针码 / 测试原文
+   rg -n 'CCGW-SMOKE-88421' ~/.claude_lproxy/projects/<sessionId>/
+   # 或: grep -R -n 'CCGW-SMOKE-88421' ~/.claude_lproxy/projects/<sessionId>/
+   ```
+
+   至少一个 `*.json` 命中 → 内容落盘成功。搜不到 → **不算自检通过**（可能是旧目录或未走网关）。逐步说明见 [cc-gateway/README.md](./cc-gateway/README.md) 步骤 6。
+
+8. 换下一个 `active`：改 yaml → **重启 Gateway** → 新开 Claude（新 settings / 新 session / **新探针码**）→ 再测一遍。
 
 ### 0.4 自检通过标准（打勾再进正式采集）
 
-- [ ] `A`（GLM）：能对话，Gateway 有对应 `<sessionId>/*.json`  
+- [ ] `A`（GLM）：能对话，Gateway 有对应 `<sessionId>/*.json`，**log 能搜到本轮测试原文**  
 - [ ] `B`（千问）：同上  
 - [ ] `C`（Opus 订阅）：同上（本机订阅已登录）  
 - [ ] **每一轮** Gateway 目录名 = Claude Code 主会话文件名（同一 Session ID，与默认行为一致）  

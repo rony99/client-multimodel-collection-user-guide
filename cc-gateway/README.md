@@ -226,7 +226,8 @@ Start Claude Code with:
 1. 网关在本机监听；  
 2. Claude Code 能经网关拿到模型回复；  
 3. 硬盘上**出现与 Session ID 同名的 Gateway 文件夹**，且与 Claude 会话文件同名；  
-4. 对 `active=A`、`B`、`C` **各成功至少一轮**。
+4. **Gateway 的 log（`*.json`）里能搜到你刚发的测试原文**（证明这次对话确实被网关记下来了）；  
+5. 对 `active=A`、`B`、`C` **各成功至少一轮**。
 
 下面以 **`active: A`（GLM）** 写完整步骤；B、C 只是改配置重做一遍。
 
@@ -254,14 +255,15 @@ claude --settings /绝对路径/providers.claude.settings.json
 **必须**带 `--settings ...providers.claude.settings.json`。  
 若直接敲 `claude` 不带 settings，往往**不走 Gateway**，后面就没有合法抓包。
 
-### 步骤 3：在 Claude 里发一句短话
+### 步骤 3：在 Claude 里发一句「可搜索」的测试话
 
-例如：
+建议用**带一点独特字样**的句子（方便在日志里全文搜索），例如：
 
 ```text
-只用一个词回复：pong
+Gateway自检专用句：请只回复一个词 pong。探针码 CCGW-SMOKE-88421
 ```
 
+把 **`CCGW-SMOKE-88421`**（或你自己改的探针码）记下来，后面步骤 6 要用。  
 等到界面上出现模型回复（不是一直报错、不是空白失败）。
 
 ### 步骤 4：找出本次的 Session ID（Claude Code 侧）
@@ -301,18 +303,55 @@ ls -lt ~/.claude_lproxy/projects | head
 ls -la ~/.claude_lproxy/projects/$SESSION_ID/
 ```
 
-**验证成功的标志：**
+**目录层面通过的标志：**
 
 | 检查项 | 通过标准 |
 | --- | --- |
 | 文件夹存在 | 路径就是 `.../projects/<与步骤4完全相同的UUID>/` |
-| 里面有文件 | 至少 1 个 `*.json`（有的包可能命名 call-001 等，只要是 json 落盘即可） |
+| 里面有文件 | 至少 1 个 `*.json`（命名可能是 call-001 等，只要是 json 落盘即可） |
 | Session ID 一致 | 文件夹名 **字符串等于** Claude 的 `<uuid>.jsonl` 去掉后缀后的部分 |
 | 对话有效 | Claude 侧有模型回复，不是纯本地错误信息 |
 
-可选：打开某一个 `*.json`，用编辑器搜索该 UUID，应能在字段或请求头痕迹里看到同一 Session（有的版本字段名是 `sessionId` 等）。
+仅有「文件夹同名」还不够，**必须再做步骤 6**，确认内容是这次测试写进去的。
 
-### 步骤 6：用同一方法再测 B 和 C
+### 步骤 6：在 Gateway log 里搜索测试原文（内容是否落盘）
+
+目的：证明这次测试请求**真的进入**了 Gateway 日志，而不是空目录、看错旧 session、或只对上了 ID 却没有内容。
+
+在终端执行（把探针码换成步骤 3 你实际用的那串）：
+
+```bash
+# 在该 Session 的全部 Gateway 抓包里搜索测试文本
+PROBE=CCGW-SMOKE-88421
+SESSION_ID=你在步骤4记下的uuid
+
+# macOS / Linux
+rg -n "$PROBE" ~/.claude_lproxy/projects/$SESSION_ID/
+# 若没有 rg，可用：
+grep -R -n "$PROBE" ~/.claude_lproxy/projects/$SESSION_ID/
+```
+
+Windows PowerShell 示例：
+
+```powershell
+$sid = "你的-session-uuid"
+$probe = "CCGW-SMOKE-88421"
+Select-String -Path "$env:USERPROFILE\.claude_lproxy\projects\$sid\*.json" -Pattern $probe
+```
+
+也可以不用命令行：用任意编辑器打开该目录下**最新修改**的某个 `*.json`，用「查找」搜 `CCGW-SMOKE-88421` 或句子里的「Gateway自检专用句」。
+
+**通过标准：**
+
+| 结果 | 判定 |
+| --- | --- |
+| 至少在一个 `*.json` 里搜到完整探针码 / 你的测试原句 | ✅ 内容落盘成功 |
+| 有文件夹、有 json，但**搜不到**测试文本 | ❌ 可能是旧 session、空壳文件、或请求未进本网关——不要当通过 |
+| 能搜到用户句，有时还能搜到模型回复词（如 `pong`） | 更理想（有的流式响应结构不同，**以用户测试原文能搜到为准**） |
+
+说明：日志里通常会包在 JSON 字段中（如 messages / body），**不必整句完全裸露在文件最外层**，只要全文搜索能命中你的探针串即可。认证字段一般会脱敏，但**对话正文会保留**——因此不要用含密码的句子当探针。
+
+### 步骤 7：用同一方法再测 B 和 C
 
 测完 A 后：
 
@@ -321,12 +360,12 @@ ls -la ~/.claude_lproxy/projects/$SESSION_ID/
 3. 编辑 `providers.yaml`：把 `active: A` 改成 `active: B`（配好 B 的 url/key）。  
 4. **重新启动**网关（§4）。  
 5. **新开**一个终端，重新 `claude --settings <新打印的 settings 路径>`（新 session）。  
-6. 再说一句话 → 重复步骤 4–5 核对 **新的** Session ID 与 Gateway 文件夹一致。  
+6. 再发一句**带新探针码**的短话（例如把数字改成 `88422`，避免和 A 轮混淆）→ 重复步骤 4–**6**（含 log 全文搜索）。  
 7. 再对 `active: C` 做一轮（本机须已登录官方订阅）。
 
-### 步骤 7：自检清单（全部 ✓ 才算「Gateway 管用」）
+### 步骤 8：自检清单（全部 ✓ 才算「Gateway 管用」）
 
-- [ ] `active=A`：能对话 + 两边 Session ID 一致 + 有 `*.json` 抓包  
+- [ ] `active=A`：能对话 + 两边 Session ID 一致 + 有 `*.json` 抓包 + **log 能搜到本轮测试原文**  
 - [ ] `active=B`：同上  
 - [ ] `active=C`：同上  
 - [ ] 全程用的是 Gateway 打印的 `claude --settings ...`  
@@ -365,6 +404,7 @@ ls -la ~/.claude_lproxy/projects/$SESSION_ID/
 | Gateway 有文件夹，但 UUID **对不上** Claude 的 jsonl 名 | 开了多个 session / 看了旧目录 | 用「时间最新」的 jsonl 与最新 projects 子目录对比 |
 | 换了 `active` 但还是旧模型 | 没重启网关 / 没新开 Claude | 必须重启网关 + 新 session |
 | 抓包 json 里看见明文 key | 异常版本或看错文件 | 正常应脱敏；勿把日志上传到公网仓库 |
+| Session 文件夹在，但搜不到测试探针码 | 打开了**旧** session 目录、或请求未进本网关 | 确认 `$SESSION_ID` 最新；换独特探针重测；确认 `--settings` |
 
 ---
 

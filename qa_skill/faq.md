@@ -27,10 +27,11 @@ Agent 回答用户问题以本文件为准。每题格式：**结论** → **要
 
 - 采千问时不要误开成 Opus；换模型 = 改 `active` → 重启网关 → 新目录新 session。  
 - 核对 `~/.claude_lproxy/projects/<sessionId>/` 有文件，且目录名 = Claude Code 默认 Session ID。  
+- **在该目录 `*.json` 里搜索本轮测试原文 / 探针码，必须能命中**（证明内容落盘，不能只看有文件夹）。  
 - 账号 / 令牌不要写进题目仓库。  
 - **禁止只交 session 或只交 Gateway 日志。**
 
-**文档**：`Gateway采集说明.md` §0、§4–§7；`用户操作步骤.md` 第 0、1、6、8 步。
+**文档**：`Gateway采集说明.md` §0、§4–§7；`cc-gateway/README.md` 步骤 5–6；`用户操作步骤.md` 第 0、1、6、8 步。
 
 ### A3. Gateway 日志路径？Session ID 是什么？
 
