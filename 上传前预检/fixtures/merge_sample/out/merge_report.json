@@ -7,7 +7,7 @@
   "records": 2,
   "skipped": [
     {
-      "path": "/Users/rony/me/shixian/collect_code/甲方要求/阿里多模型比对/v_1.1_0711/采集用户说明_final/上传前预检/fixtures/merge_sample/gateway/11111111-aaaa-bbbb-cccc-222222222222/probe-title.json",
+      "path": "/tmp/merge_sample/gateway/11111111-aaaa-bbbb-cccc-222222222222/probe-title.json",
       "reason": "no_tools"
     }
   ],
@@ -15,7 +15,7 @@
     {
       "level": "PASS",
       "code": "GATEWAY_SESSION_DIR",
-      "message": "Gateway 会话目录：/Users/rony/me/shixian/collect_code/甲方要求/阿里多模型比对/v_1.1_0711/采集用户说明_final/上传前预检/fixtures/merge_sample/gateway/11111111-aaaa-bbbb-cccc-222222222222（3 个 *.json call）"
+      "message": "Gateway 会话目录：/tmp/merge_sample/gateway/11111111-aaaa-bbbb-cccc-222222222222（3 个 *.json call）"
     },
     {
       "level": "PASS",
@@ -25,12 +25,12 @@
     {
       "level": "PASS",
       "code": "SESSION_DIR",
-      "message": "存在同名 session 目录（常含 subagent）：/Users/rony/me/shixian/collect_code/甲方要求/阿里多模型比对/v_1.1_0711/采集用户说明_final/上传前预检/fixtures/merge_sample/session_root/11111111-aaaa-bbbb-cccc-222222222222"
+      "message": "存在同名 session 目录（常含 subagent）：/tmp/merge_sample/session_root/11111111-aaaa-bbbb-cccc-222222222222"
     },
     {
       "level": "PASS",
       "code": "MAIN_SESSION",
-      "message": "主会话：/Users/rony/me/shixian/collect_code/甲方要求/阿里多模型比对/v_1.1_0711/采集用户说明_final/上传前预检/fixtures/merge_sample/session_root/11111111-aaaa-bbbb-cccc-222222222222.jsonl"
+      "message": "主会话：/tmp/merge_sample/session_root/11111111-aaaa-bbbb-cccc-222222222222.jsonl"
     },
     {
       "level": "PASS",
@@ -50,7 +50,7 @@
     {
       "level": "PASS",
       "code": "WRITE_JSONL",
-      "message": "写出主 call-level：/Users/rony/me/shixian/collect_code/甲方要求/阿里多模型比对/v_1.1_0711/采集用户说明_final/上传前预检/fixtures/merge_sample/out/call_level.jsonl"
+      "message": "写出主 call-level：/tmp/merge_sample/out/call_level.jsonl"
     },
     {
       "level": "PASS",
@@ -70,7 +70,7 @@
     {
       "level": "PASS",
       "code": "WRITE_AGENTS",
-      "message": "写出 agents → /Users/rony/me/shixian/collect_code/甲方要求/阿里多模型比对/v_1.1_0711/采集用户说明_final/上传前预检/fixtures/merge_sample/out/agents"
+      "message": "写出 agents → /tmp/merge_sample/out/agents"
     },
     {
       "level": "PASS",

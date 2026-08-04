@@ -59,11 +59,13 @@ active: B
 root_dir:
 
 A:  # GLM
-  url: https://open.bigmodel.cn/api/anthropic
+  # 填你可用的 Anthropic 兼容 endpoint（以厂商/聚合文档为准）
+  url: https://your-glm-provider.example/api/anthropic
   key: your-glm-key
 
-B:  # 千问
-  url: https://dashscope.aliyuncs.com/apps/anthropic
+B:  # 千问（qwen-3.7-max）
+  # 填你可用的 Anthropic 兼容 endpoint（以厂商/聚合文档为准）
+  url: https://your-qwen-provider.example/apps/anthropic
   key: your-qwen-key
 
 C: {}  # 官方 Opus：无需 url / key
@@ -71,8 +73,8 @@ C: {}  # 官方 Opus：无需 url / key
 
 | `active` | 对应模型（生成侧） | 你需要提供 |
 | --- | --- | --- |
-| `A` | GLM（配置里会钉 `glm-5.2`） | `url` + `key` |
-| `B` | 千问（`qwen-3.7-max`） | `url` + `key` |
+| `A` | GLM（配置里会钉 `glm-5.2`） | Anthropic 兼容 `url` + 自己的 `key` |
+| `B` | 千问（`qwen-3.7-max`） | Anthropic 兼容 `url` + 自己的 `key` |
 | `C` | 官方 Opus 订阅透传 | 本机已登录 Claude 订阅 |
 
 可选：
