@@ -50,7 +50,7 @@ description: >-
 | 单次 eval 通过 | 该次做题结果上 `test.sh` 退出码 `0` |
 | 集合比例合格 | **≥3 题**；**每题千问均挂**；禁三模型全过；Opus≤60%；Opus−千问>20%；GLM≥1 道过；turns≥20（**自核，结构脚本不查**） |
 | 结构预检通过 | 仅文件结构与完整性检查通过 |
-| call-level 合并 | 预检 §B：`--package` 包内 `session/`+`cc-gateway-log/` → `call_level.jsonl`（≠ 终审） |
+| call-level 合并 | 预检 §B：`--package` 包内 session+gateway → **临时** call_level 再校验（signature 非空；thinking 文本可空；≠ 终审） |
 | 平台 API | **不提供**；用户自备账号经 Gateway |
 | 终审通过 | **以甲方实际审核为准** |
 

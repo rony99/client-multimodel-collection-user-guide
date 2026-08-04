@@ -512,7 +512,7 @@ def check_model_sessions(sessions_root: Path, report: Report) -> None:
             report.add(
                 "PASS",
                 f"CALL_LEVEL_{model}",
-                f"{hit.name} 存在 call_level.jsonl（可选合并产物；本预检不验字段细节）",
+                f"{hit.name} 存在 call_level.jsonl（可选/历史产物；正式§B 默认不写回包，字段以临时合并校验为准）",
             )
         sub_a = (sroot or hit) / "subagents"
         if sub_a.is_dir():

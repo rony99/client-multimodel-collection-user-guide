@@ -73,9 +73,10 @@ Agent 回答用户问题以本文件为准。每题格式：**结论** → **要
 - Gateway 抓包放在同模型 `cc-gateway-log/`。
 - 需要甲方 call-level 时：整理进包后用  
   `merge_call_level.py --package <任务包> --check`  
-  **只读包内** `session/` + `cc-gateway-log/`（见 [上传前预检/SKILL.md](../上传前预检/SKILL.md) §B）。
-- **禁止**编造 system/tools；request 取 Gateway，response 必要时用 session 补。
-- 用户侧**不要求**手工写 call-level；合并可写 `agents/main_agent.json`。
+  **只读包内** `session/` + `cc-gateway-log/`，产物默认在**临时目录**（见 [上传前预检/SKILL.md](../上传前预检/SKILL.md) §B）。  
+- **禁止**编造 system/tools；request 取 Gateway，response 必要时用 session 补。  
+- 用户侧**不要求**手工写 call-level；正式预检默认**不**改你包，也**不**强制写包内 `agents/`。  
+- thinking：**signature 非空**；thinking 文本可空。  
 - **最终以甲方实际审核为准**。
 
 **文档**：`用户操作步骤.md` 第 6 / 8 步；`上传前预检/SKILL.md` §B。

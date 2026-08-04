@@ -3,7 +3,7 @@ name: client-harbor-presubmit
 description: >-
   上传前预检众包任务包。用户只需提供一个「甲方数据包」目录路径。
   有路径后：§A 结构；§B 在包内定位 session/ 与 cc-gateway-log/、合并到临时目录（不写回数据包）、
-  再对合并后的 call-level 做甲方日志字段校验（含 thinking+signature）。
+  再对合并后的 call-level 做甲方日志字段校验（须有 thinking 块；**signature 非空**；thinking 正文可空）。
   未给路径时必须先询问。不查集合过题比例；绿 ≠ 终审。
 ---
 
@@ -60,7 +60,7 @@ PACK = 用户数据包目录
     → §B：merge_call_level.py --package PACK --check
          · 只读 trajectories/<模型>/session/ 与 cc-gateway-log/
          · 合并到系统临时目录（scratch）
-         · 校验合并后 JSONL 的甲方字段（含 thinking + 非空 signature）
+         · 校验合并后 JSONL：thinking 块 + **signature 非空**（正文可空）
     → 汇报两段结果；说明临时目录路径（可选调试）
 ```
 

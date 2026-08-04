@@ -257,7 +257,7 @@ GLM / Opus 同样各拷一套。
 
 ```bash
 python3 上传前预检/scripts/presubmit_check.py --task-dir <任务包>
-# 可选 call-level（同样只认包路径）：
+# 可选 call-level：包内 session+gateway 合并到临时目录后校验（不写回包）
 python3 上传前预检/scripts/merge_call_level.py --package <任务包> --check
 ```
 
