@@ -1,5 +1,10 @@
 # 采集用户说明（v1.1）
 
+<span style="color:#d93025">
+<strong>重要：</strong>预审 / 上传前预检 / 结构或 call-level 自检结果<strong>仅供参考</strong>，
+不代表交付合格或结算结果。<strong>最终一律以甲方审核标准为准。</strong>
+</span>
+
 本文件夹可独立使用。
 
 ## 开始前请先这样走
