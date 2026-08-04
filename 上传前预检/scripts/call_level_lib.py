@@ -1036,7 +1036,11 @@ def full_merge(
         if not sid:
             sid = exp
         # Gateway folder name
-        if gateway_dir.name and gateway_dir.name != exp and gateway_dir.name not in ("traces", "projects"):
+        if gateway_dir.name and gateway_dir.name != exp and gateway_dir.name not in (
+            "traces",
+            "projects",
+            "cc-gateway-log",  # 交卷包内固定目录名，不以目录名当 sid
+        ):
             if gw_calls and any(c.session_id == exp for c in gw_calls):
                 pass
             elif gateway_dir.name != exp:
@@ -1166,3 +1170,227 @@ def full_merge_by_session_id(
             seen.add(key)
     merge_report.session_id = merge_report.session_id or session_id
     return records, merge_report, resolved
+
+
+PACKAGE_SESSION_DIR = "session"
+PACKAGE_GATEWAY_DIR = "cc-gateway-log"
+PACKAGE_MODEL_ALIASES = {
+    "claude-opus-4.8": ("claude-opus-4-8", "claude-opus-4.8"),
+    "claude-opus-4-8": ("claude-opus-4-8", "claude-opus-4.8"),
+}
+REQUIRED_TRAJ_MODELS = ("claude-opus-4.8", "qwen-3.7-max", "glm-5.2")
+
+
+def package_traj_root(package: Path) -> Path:
+    return package.expanduser().resolve() / "trajectories"
+
+
+def discover_package_model_dirs(package: Path) -> list[Path]:
+    """Return model trajectory dirs present under package/trajectories/ (v1.1 names)."""
+    traj = package_traj_root(package)
+    if not traj.is_dir():
+        return []
+    present = {p.name: p for p in traj.iterdir() if p.is_dir()}
+    out: list[Path] = []
+    seen: set[Path] = set()
+    for model in REQUIRED_TRAJ_MODELS:
+        aliases = PACKAGE_MODEL_ALIASES.get(model, (model,))
+        for a in aliases:
+            if a in present:
+                d = present[a]
+                if d not in seen:
+                    out.append(d)
+                    seen.add(d)
+                break
+    return out
+
+
+def resolve_package_model(model_dir: Path) -> ResolvedPaths:
+    """Resolve merge inputs from 交卷包 trajectories/<model>/ 布局.
+
+    trajectories/<model>/
+      session/session.jsonl       # 或 <sid>.jsonl
+      session/subagents/*.jsonl   # 可选
+      cc-gateway-log/*.json       # 本场抓包
+    """
+    model_dir = model_dir.expanduser().resolve()
+    session_dir = model_dir / PACKAGE_SESSION_DIR
+    gw_dir = model_dir / PACKAGE_GATEWAY_DIR
+    issues: list[Issue] = []
+    sub_files: list[Path] = []
+    main: Path | None = None
+    sid = ""
+
+    if not model_dir.is_dir():
+        issues.append(Issue("FAIL", "MODEL_DIR", f"模型轨迹目录不存在：{model_dir}"))
+        return ResolvedPaths("", model_dir, model_dir, None, [], None, issues)
+
+    if not session_dir.is_dir():
+        issues.append(
+            Issue(
+                "FAIL",
+                "PKG_SESSION_DIR",
+                f"缺少 {model_dir.name}/{PACKAGE_SESSION_DIR}/（须放主会话 .jsonl）",
+            )
+        )
+    else:
+        issues.append(Issue("PASS", "PKG_SESSION_DIR", f"存在 {session_dir}"))
+
+    if not gw_dir.is_dir():
+        issues.append(
+            Issue(
+                "FAIL",
+                "PKG_GATEWAY_DIR",
+                f"缺少 {model_dir.name}/{PACKAGE_GATEWAY_DIR}/（须放 cc-gateway 抓包 *.json）",
+            )
+        )
+    else:
+        n = len(list(gw_dir.glob("*.json")))
+        if n == 0:
+            issues.append(
+                Issue("FAIL", "PKG_GATEWAY_EMPTY", f"{PACKAGE_GATEWAY_DIR}/ 下无 *.json：{gw_dir}")
+            )
+        else:
+            issues.append(
+                Issue("PASS", "PKG_GATEWAY_DIR", f"存在 {gw_dir}（{n} 个 *.json）")
+            )
+
+    if session_dir.is_dir():
+        mains = main_session_jsonl_files(session_dir)
+        if not mains:
+            issues.append(
+                Issue(
+                    "FAIL",
+                    "MAIN_SESSION",
+                    f"{PACKAGE_SESSION_DIR}/ 下未找到主会话 .jsonl：{session_dir}",
+                )
+            )
+        else:
+            main = mains[0]
+            issues.append(Issue("PASS", "MAIN_SESSION", f"主会话：{main}"))
+            if len(mains) > 1:
+                issues.append(
+                    Issue(
+                        "WARN",
+                        "MULTI_MAIN",
+                        f"{PACKAGE_SESSION_DIR}/ 有多条顶层 .jsonl，仅用 {main.name}",
+                    )
+                )
+            # peek sessionId
+            _, sid, sid_issues = load_session_assistants(main)
+            for iss in sid_issues:
+                if iss.code == "SESSION_ID_MISSING":
+                    issues.append(iss)
+                # ignore assistant-related fail for resolve-only; full_merge re-reads
+            for p in sorted((session_dir / "subagents").glob("*.jsonl")) if (session_dir / "subagents").is_dir() else []:
+                sub_files.append(p)
+            if sub_files:
+                issues.append(
+                    Issue("PASS", "SUBAGENT_FILES", f"session/subagents 共 {len(sub_files)} 个文件")
+                )
+
+    return ResolvedPaths(
+        session_id=sid,
+        session_root=session_dir if session_dir.is_dir() else model_dir,
+        gateway_root=gw_dir if gw_dir.is_dir() else model_dir,
+        main_session=main,
+        subagent_jsonls=sub_files,
+        gateway_dir=gw_dir if gw_dir.is_dir() else None,
+        issues=issues,
+    )
+
+
+def full_merge_package_model(
+    model_dir: Path,
+    out_path: Path | None = None,
+    agents_out: Path | None = None,
+    snapshot_out: Path | None = None,
+    model: str = "",
+    subagent_out_dir: Path | None = None,
+) -> tuple[list[dict[str, Any]], MergeReport, ResolvedPaths]:
+    """交卷包内单模型合并：只读 session/ + cc-gateway-log/，不回源本机 projects。"""
+    resolved = resolve_package_model(model_dir)
+    report = MergeReport(session_id=resolved.session_id)
+    for iss in resolved.issues:
+        report.issues.append(iss)
+    if resolved.has_fatal() or not resolved.main_session or not resolved.gateway_dir:
+        return [], report, resolved
+
+    model_dir = model_dir.expanduser().resolve()
+    if out_path is None:
+        out_path = model_dir / "call_level.jsonl"
+    if subagent_out_dir is None and resolved.subagent_jsonls:
+        subagent_out_dir = model_dir / "session" / "subagents"
+        # write next to session side; use model-level subagents for call_level
+        subagent_out_dir = model_dir / "subagents_call_level"
+
+    records, merge_report = full_merge(
+        session_path=resolved.main_session,
+        gateway_dir=resolved.gateway_dir,
+        out_path=out_path,
+        agents_out=agents_out,
+        snapshot_out=snapshot_out,
+        model=model or model_dir.name,
+        subagent_jsonls=resolved.subagent_jsonls,
+        subagent_out_dir=subagent_out_dir,
+        expected_session_id=resolved.session_id,
+    )
+    seen = {(i.level, i.code, i.message) for i in merge_report.issues}
+    for iss in report.issues:
+        key = (iss.level, iss.code, iss.message)
+        if key not in seen:
+            merge_report.issues.insert(0, iss)
+            seen.add(key)
+    merge_report.session_id = merge_report.session_id or resolved.session_id
+    return records, merge_report, resolved
+
+
+def full_merge_package(
+    package: Path,
+    models: list[str] | None = None,
+    write_agents: bool = True,
+) -> list[tuple[str, list[dict[str, Any]], MergeReport, ResolvedPaths, Path]]:
+    """合并数据包 trajectories 下全部（或选定）模型。
+
+    Returns list of (model_dir_name, records, report, resolved, out_path).
+    """
+    package = package.expanduser().resolve()
+    traj = package_traj_root(package)
+    results: list[tuple[str, list[dict[str, Any]], MergeReport, ResolvedPaths, Path]] = []
+    if not traj.is_dir():
+        rep = MergeReport()
+        rep.add("FAIL", "TRAJ_ROOT", f"数据包缺少 trajectories/：{package}")
+        dummy = ResolvedPaths("", package, package, None, [], None, list(rep.issues))
+        results.append(("", [], rep, dummy, package / "call_level.jsonl"))
+        return results
+
+    model_dirs = discover_package_model_dirs(package)
+    if models:
+        wanted: set[str] = set()
+        for m in models:
+            wanted.update(PACKAGE_MODEL_ALIASES.get(m, (m,)))
+            wanted.add(m)
+        model_dirs = [d for d in model_dirs if d.name in wanted]
+        if not model_dirs:
+            for m in models:
+                p = traj / m
+                if p.is_dir():
+                    model_dirs.append(p)
+
+    agents_out = package / "agents" if write_agents else None
+    for i, md in enumerate(model_dirs):
+        out = md / "call_level.jsonl"
+        ao = agents_out if write_agents and i == 0 else None
+        recs, rep, resolved = full_merge_package_model(
+            model_dir=md,
+            out_path=out,
+            agents_out=ao,
+            model=md.name,
+        )
+        results.append((md.name, recs, rep, resolved, out))
+    if not model_dirs:
+        rep = MergeReport()
+        rep.add("FAIL", "NO_MODELS", f"trajectories/ 下未找到 opus/qwen/glm 模型目录：{traj}")
+        dummy = ResolvedPaths("", traj, traj, None, [], None, list(rep.issues))
+        results.append(("", [], rep, dummy, traj / "call_level.jsonl"))
+    return results

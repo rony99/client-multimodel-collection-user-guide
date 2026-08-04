@@ -2,13 +2,22 @@
 
 本文件夹可独立使用。
 
-请按 **[用户操作步骤.md](./用户操作步骤.md)** 完成配连接、出题、调难度与交卷。  
-Gateway 专章：**[Gateway采集说明.md](./Gateway采集说明.md)**（启动 cc-gateway、用自己的账号、日志落盘与校验）。  
+请按 **[用户操作步骤.md](./用户操作步骤.md)** 完成配连接、出题、调难度与交卷。
+
+**本地 Gateway 预编译包已放在仓库内：[cc-gateway/](./cc-gateway/)**（mac / linux / win）。  
+专章：**[Gateway采集说明.md](./Gateway采集说明.md)**。
+
+<span style="color:#d93025">
+<strong>开跑前必做：</strong>先按 Gateway 说明「§0 接通自检」验证——三套模型配置（A GLM / B 千问 / C Opus）
+都能经由本机 Gateway 对话，且抓包目录名 = Session ID 并与 Claude Code 默认会话 ID 一致。
+自检通过后才能进正式采集。采题期间<strong>保持 Gateway 开启</strong>。
+交卷每个模型必须<strong>同时</strong>交 <code>session/</code>（Claude Code）与 <code>cc-gateway-log/</code>（Gateway），<strong>缺一不可</strong>。
+</span>
+
 [甲方要求说明.md](./甲方要求说明.md) 含门槛细则与文末「甲方要求一览」；日常以操作步骤为主。
 
-交卷前可用 **[上传前预检/](./上传前预检/)**：
-- **§A 结构预检**（文件齐不齐；不查集合比例）  
-- **§B 可选**：`session 根目录 + Gateway 根目录 + Session ID` → 合并甲方 call-level 并字段校验  
+交卷前可用 **[上传前预检/](./上传前预检/)**：用户**只提供数据包目录路径**即可  
+（§A 结构 + §B 包内 `session/`/`cc-gateway-log` 合并校验；未给路径时先询问）。  
 
 结构绿 / call-level 绿 ≠ 比例合格 ≠ 结算。**最终以甲方实际审核为准。**
 
@@ -16,10 +25,11 @@ Gateway 专章：**[Gateway采集说明.md](./Gateway采集说明.md)**（启动
 
 想参与采集？见 **[参与方式.md](./参与方式.md)**。
 
-| 文档 | 用途 |
+| 文档 / 资源 | 用途 |
 | --- | --- |
 | [用户操作步骤.md](./用户操作步骤.md) | 主线：怎么做 |
-| [Gateway采集说明.md](./Gateway采集说明.md) | 本地 Gateway 启动、切换模型、日志目录与自检 |
+| [cc-gateway/](./cc-gateway/) | **本机预编译 Gateway**（先做接通自检） |
+| [Gateway采集说明.md](./Gateway采集说明.md) | 自检清单、启动、切换模型、双目录交卷、Session ID |
 | [甲方要求说明.md](./甲方要求说明.md) | 门槛、字段、Checklist、甲方要求一览 |
 | [参与方式.md](./参与方式.md) | 谁可参与、如何报名进群 |
 | [甲方数据包参考样例/](./甲方数据包参考样例/) | 交卷结构样例 |
@@ -31,7 +41,8 @@ Gateway 专章：**[Gateway采集说明.md](./Gateway采集说明.md)**（启动
 - **对象**：理工类程序员相关从业者（前后端、数据分析、测试、DevOps 等）  
 - **门槛**：Claude Code 完成过 ≥2 个项目；有 Docker 与单元测试经验  
 - **报名**：微信发给 **栗子** 进群  
-- **开跑后**：本机启动 **cc-gateway**，用**自己的账号**经网关采 Opus / GLM / 千问；交卷每模型同时交 **`session/` + `cc-gateway-log/`**（详 [Gateway采集说明.md](./Gateway采集说明.md)）
+- **开跑前**：用仓库内 [cc-gateway/](./cc-gateway/) 做 **§0 接通自检**（通三模型 + Session ID 对齐）  
+- **开跑后**：保持 Gateway 开启，用**自己的账号**采千问 / GLM / Opus；每模型**同时**交 **`session/` + `cc-gateway-log/`**（**缺一不可**）
 
 ## 提交量与分布（摘要）
 
@@ -49,8 +60,11 @@ A：**不会。** 使用本地 **Gateway（cc-gateway）**；你用自己的 Key
 **Q：可以绕过 Gateway、直连厂商 API 吗？**  
 A：正式采集须走 Gateway，否则没有 Session 目录抓包。不要用未接入 Gateway 的直连冒充正式轨迹。
 
+**Q：Gateway 装在哪？先测什么？**  
+A：仓库 [cc-gateway/](./cc-gateway/)。**正式采题前必须做 Gateway 说明 §0**：三套 active 都能对话、抓包目录名 = Session ID 且与 Claude Code 一致。通过后再采集。
+
 **Q：Gateway 日志在哪？和 Session 什么关系？**  
-A：本机默认 `~/.claude_lproxy/projects/<sessionId>/*.json`，**文件夹名 = Session ID**。交卷时整夹拷入 `trajectories/<模型>/cc-gateway-log/`，与 `session/` 内会话同一 ID。详见 Gateway 说明第 7–8 节。
+A：本机默认 `~/.claude_lproxy/projects/<sessionId>/*.json`，**文件夹名 = Session ID**。交卷拷入 `trajectories/<模型>/cc-gateway-log/`，与 `session/` 同一 ID。**session + Gateway 日志都要交，缺一不可。**
 
 **Q：怎么才算「通过」？**  
 A：单题单次看 Docker 里 `tests/test.sh` 退出码是否为 `0`。个人提交还要看**整体过/不过比例**；最终以甲方审核为准。
@@ -65,4 +79,6 @@ A：**众包日常不要求。** 每模型每题 1 条轨迹即可；看你交�
 A：不算。结构预检只做文件检查；call-level 合并仅验轨迹字段；集合比例须自核；**最终以甲方实际审核为准。**
 
 **Q：要不要自己做 call-level？**  
-A：不必手写。可用 [上传前预检/SKILL.md](./上传前预检/SKILL.md) §B：提供 **session 根目录 + Gateway 根目录 + Session ID** 自动合并并校验。也可只交原生 session + Gateway 目录，由平台后处理——以群内交卷说明为准。
+A：不必手写。整理好数据包后：  
+`python3 上传前预检/scripts/merge_call_level.py --package <任务包> --check`  
+只用包内 `session/` + `cc-gateway-log/`。详见 [上传前预检/SKILL.md](./上传前预检/SKILL.md)。

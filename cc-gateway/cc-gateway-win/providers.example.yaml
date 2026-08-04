@@ -1,0 +1,16 @@
+# 当前启用：A=GLM | B=千问 | C=官方 Opus（订阅透传）
+active: C
+
+# 可选：抓包文件根目录。留空时默认使用 ~/.claude_lproxy/projects
+# Windows 对应 C:\Users\<用户名>\.claude_lproxy\projects
+root_dir:
+
+A:  # GLM
+  url: https://your-glm-provider.example/api/anthropic
+  key: your-glm-key
+
+B:  # 千问
+  url: https://your-qwen-provider.example/apps/anthropic
+  key: your-qwen-key
+
+C: {}  # 官方 Opus：无需 url / key

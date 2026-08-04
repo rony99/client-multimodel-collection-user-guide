@@ -1,192 +1,137 @@
 ---
 name: client-harbor-presubmit
 description: >-
-  上传前结构预检众包 Harbor 任务包：检查甲方原格式数据包与 trajectories/
-  （每模型 session/ + cc-gateway-log/），可选将 session-root+Gateway-root+SessionID 合并为甲方 call-level。
-  不查集合过题比例。用户提供路径后由 Agent 执行；结构绿 ≠ 甲方终审。
+  上传前预检众包任务包。用户只需提供一个「甲方数据包」目录路径。
+  有路径后：§A 结构 + §B 包内 session/cc-gateway-log 合并校验。
+  用户未给路径时必须先询问，禁止猜测本机 projects 或自行扩路径。
+  不查集合过题比例；结构/合并绿 ≠ 终审。
 ---
 
-# 上传前结构预检（众包自包含包）
+# 上传前预检（众包自包含包）
 
-对本目录上级手册约定的**待上传提交根目录**做**结构与完整性**检查；需要交付甲方 call-level 时，先跑 **session + Gateway 合并**。
+对用户**已整理好的甲方数据包**做 §A 结构 + §B 包内 call-level 合并校验。
 
-## 开场必须告诉用户（原文级要点）
+---
 
-> **结构预检**只查文件是否存在、字段是否齐全、结构是否合理。  
-> **不查集合过题比例**（须你自行核：≥3 题；**每题千问均挂**；禁三模型全过；Opus≤60%；Opus−千问>20%；GLM≥1 道过）。  
-> **结构绿 ≠ 比例合格 ≠ 结算**；**最终以甲方实际审核为准。**  
-> 平台**不**代提供模型 API；用户自备账号经 Gateway。  
-> 若需要 call-level：用原生 session + Gateway 抓包**合并**，不可编造 system/tools。
+## Agent 入口硬规则（必先执行）
 
-## 用户需要提供什么
+### 用户只需提供一件事
 
-### 结构预检（§A）
+**唯一必要输入：数据包目录路径**（绝对路径优先），例如：
 
-| 输入 | 说明 |
+- `/Users/me/submit/20260617_gateway-raw-http`
+- 或用户工作区中指向该目录的路径
+
+| 检查 | 是否另要路径 |
 | --- | --- |
-| **提交根目录** `--task-dir` | 内含一个或多个甲方原格式数据包 |
+| §A 结构 | 否，用该路径 `--task-dir` |
+| §B 合并校验 | 否，用**同一路径** `--package` |
+| 本机 `~/.claude` / `~/.claude_lproxy` | **不要索要**（正式流程不用） |
+| Session ID 列表 | **不要索要**（从包内 session 自读） |
 
-### 合并 call-level（§B）——优先只要这三项
+### 若用户未提供数据包路径
 
-两边都用 **同一个 Session ID** 命名：
+1. **立刻停住**，不要跑预检脚本、不要猜路径、不要去扫 `~/.claude`。  
+2. **先用一句话向用户要路径**，例如：
 
-| 输入 | 典型路径 | 脚本如何解析 |
-| --- | --- | --- |
-| **session 根目录** | `~/.claude/projects/<工作目录编码>/` | 主会话：`<sessionId>.jsonl`；若有 subagent：同名文件夹 `<sessionId>/`（常含 `subagents/*.jsonl`） |
-| **Gateway 根目录** | `~/.claude_lproxy/projects/` | 会话抓包：`<sessionId>/*.json`（该 session 下全部 call） |
-| **Session ID** | 与上述文件/文件夹同名 | 必须两边一致 |
+> 请提供已整理好的**甲方数据包目录**的完整路径（需含 `instruction.md`、`tests/`、`trajectories/` 等）。  
+> 示例：`/path/to/your-task-id`。拿到路径后我会做结构预检和包内日志合并校验。
+
+3. 用户给出有效路径后，再执行下文 §A → §B。  
+4. 路径无效（不存在 / 不是目录）→ 说明问题并**再要一次**。
+
+### 禁止
+
+- 在未拿到用户路径时声称「已完成预检」  
+- 默认改用本机原始 session 根 / Gateway 根  
+- 向用户索要 Session ID、session-root、gateway-root（正式流程）
+
+---
+
+## 开场可告知用户（拿到路径之后）
+
+> 我将用您提供的**这一个数据包路径**做：  
+> 1）结构是否齐全；2）包内 `session/` + `cc-gateway-log/` 合并 call-level。  
+> 不到您机器上的 Claude/Gateway 原始目录另找文件。  
+> 不查集合过题比例；**绿 ≠ 结算；最终以甲方审核为准。**
+
+---
+
+## 标准流程（路径已具备时）
 
 ```text
-# Claude 原生（session 根目录）
-session_root/
-  <sessionId>.jsonl              # 主 Agent（必有）
-  <sessionId>/                   # 可选：有 subagent 时
-    subagents/
-      explorer-001.jsonl
-      ...
-
-# Gateway（gateway 根目录）
-gateway_root/
-  <sessionId>/
-    call-aaa.json
-    call-bbb.json
-    ...
+用户给出 PACK = 数据包目录
+    → §A：presubmit_check.py --task-dir PACK
+    → §B：merge_call_level.py --package PACK --check
+    → 汇报两段结果
 ```
 
-一题三模型时：对**每个 Session ID** 各跑一次合并（每个模型正式 1 条轨迹对应 1 个 Session ID）。
+默认**两段都跑**（用户明确只要「看文件齐不齐」时可只跑 §A）。
 
-## 最新交卷结构（预检强制）
-
-```text
-<submit_root>/
-  <task_a>/
-    trajectories/
-      claude-opus-4-8/
-        session/
-          session.jsonl        # 主会话（可从原生 <sid>.jsonl 拷入）
-          subagents/           # 有则交齐
-        cc-gateway-log/        # 本场 cc-gateway 抓包
-          *.json
-        call_level.jsonl       # 可选：合并产物
-      glm-5.2/
-        session/
-        cc-gateway-log/
-      qwen-3.7-max/
-        session/
-        cc-gateway-log/
-    agents/                    # 可选：合并写出 main_agent.json
-```
-
-<span style="color:#d93025">不要交同题多 run 旁路目录</span>。每模型必须同时有 **`session/`**（1 条主会话）与 **`cc-gateway-log/`**（≥1 个 `*.json`）。`call_level.jsonl` 可选。
-
-示意：[../甲方数据包参考样例/](../甲方数据包参考样例/)
-
-## Agent 何时跑哪一段
-
-| 用户意图 | 跑什么 | 向用户索取 |
-| --- | --- | --- |
-| 文件齐不齐 / 交卷结构 | 仅 **§A** | 提交根或数据包路径 |
-| 合并 / 校验甲方 call-level | **§B**（可再跑 §A） | session 根 + Gateway 根 + 每个正式 Session ID；若要写入包内再要任务包路径 |
-| 全部上传前检查 | **§B（各模型 sid）→ §A** | 上两项都要 |
-
-**禁止**：用户只给了任务包、却声称已做 call-level 校验（除非包内已有通过校验的 `call_level.jsonl` 且仍建议重跑 §B）。
-
-## Agent 工作流
-
-工作目录：`采集用户说明_final/`。
-
-### A. 结构预检（默认必做）
+### §A 结构预检
 
 ```bash
 python3 上传前预检/scripts/presubmit_check.py \
-  --task-dir <用户提交根目录绝对路径> \
+  --task-dir <用户给的数据包绝对路径> \
   --markdown
 ```
 
-### B. Session + Gateway → 甲方 call-level
-
-**先向用户要齐三项：**
-
-1. `session_root`（Claude 原生 projects 目录）  
-2. `gateway_root`（默认 `~/.claude_lproxy/projects`）  
-3. `session_id`（主文件 / 同名文件夹 / Gateway 子目录同名）
-
-可选：`--out` 写入数据包某模型 `trajectories/<model>/call_level.jsonl`。
+### §B 包内合并校验
 
 ```bash
 python3 上传前预检/scripts/merge_call_level.py \
-  --session-root <Claude 原生 session 根目录> \
-  --gateway-root <Gateway 日志根目录> \
-  --session-id <SessionID> \
-  --out <输出 call_level.jsonl> \
-  --agents-out <package/agents 可选> \
-  --snapshot-out <可选 agent_config_snapshot.json> \
-  --report <可选 merge_report.json> \
+  --package <同一数据包绝对路径> \
   --check
-
-python3 上传前预检/scripts/validate_call_level.py \
-  --call-level <上一步 out> \
-  --session <session_root>/<sessionId>.jsonl \
-  --markdown
 ```
 
-脚本会自动：
+单模型（用户点名时）：
 
-- 读主文件：`session_root/<sessionId>.jsonl`  
-- 若存在 `session_root/<sessionId>/`：收集其中（含 `subagents/`）全部 `.jsonl`  
-- 读 Gateway：`gateway_root/<sessionId>/*.json` 全部 call  
-- 主链合成 `call_level.jsonl`；有 subagent 时尽量另写 `…/subagents/*_call_level.jsonl`  
-- 从 Gateway 提取 `agents/main_agent.json`（能区分时再写 `subagent.json`）  
+```bash
+python3 上传前预检/scripts/merge_call_level.py \
+  --package <同一数据包绝对路径> \
+  --model claude-opus-4-8 \
+  --check
+```
 
-**保留**原生 session 文件，勿删。合并失败时展示 report，**不要**声称可交 call-level。合并成功后再跑 **§A**。
+脚本从包内读取：
 
-合并策略：
+```text
+trajectories/<模型>/
+  session/session.jsonl     # Session ID 从文件内容解析
+  session/subagents/        # 有则
+  cc-gateway-log/*.json
+```
 
-- `request.*` ← **Gateway**（system / tools / messages）  
-- `response.response_data` ← Gateway 完整响应，否则用 **session assistant**  
-- **禁止**编造 system/tools  
-- `--check` 通过 = **甲方 call-level 字段检测 PASS**（交付规范 §7：effort/system/tools/messages/stop_reason 等）  
+写出（§B）：`trajectories/<模型>/call_level.jsonl`。
 
-**检测范围边界（Agent 必须说清）：**
+合并策略：`request.*` ← 包内 Gateway 抓包；`response` 必要时用 session；禁止编造 system/tools。
+
+兼容 CLI（`--session-root` / `--gateway-root` / `--session-id`）**仅调试**；Agent **正式不得引导用户使用**。
+
+---
+
+## 覆盖 / 不覆盖
 
 | 覆盖 | 不覆盖 |
 | --- | --- |
-| Session ID 对齐的路径解析 | 整包 Harbor 结构（用 §A） |
-| 甲方 call-level JSONL 字段 | 集合过题比例 |
-| 无候选 call / 无 assistant → FAIL | Docker Baseline/GT 实测 |
-| | 甲方人工终审 |
+| 包布局、三模型 `session/`+`cc-gateway-log/` | 集合过题比例 |
+| 包内 Session ID 对齐与合并 | Docker Baseline/GT 实测 |
+| call-level 字段检测 | 甲方终审 |
 
-回归 fixture：[fixtures/merge_sample/](./fixtures/merge_sample/)（含根目录 + session-id 模式）。
+---
 
-> 兼容：`--session` + `--gateway-dir` 仍可用，但**用户场景优先三项根目录 API**。
+## 报告怎么说
 
-## 预检覆盖什么
+1. 确认使用的路径：`PACK=…`  
+2. 贴 §A markdown 全文  
+3. 贴 §B 每模型：包内路径、session-id、records、FAIL/WARN、字段 PASS/FAIL  
+4. 结构/合并绿 ≠ 比例合格 ≠ 结算  
 
-1. 全部甲方原格式数据包布局  
-2. instruction / workspace / Dockerfile / test.sh / rubrics / meta / GT  
-3. `trajectories/` 三模型；每模型 **`session/*.jsonl` + `cc-gateway-log/*.json`**  
-4. 可选 `call_level.jsonl` 存在性（字段用 `validate_call_level.py`）  
-5. `agents/` 不强制手写  
-6. 旁路 multi-sessions → WARN  
-
-## 预检明确不覆盖
-
-| 项目 | 说明 |
-| --- | --- |
-| 集合过题比例 | 用户自核 |
-| Docker Baseline/GT | 用户自测 |
-| 终审 | **以甲方实际审核为准** |
-| Session ID 填错 / 两根目录不齐 | 合并 FAIL/WARN |
-
-## 报告怎么跟用户说
-
-1. 合并时贴：解析到的 main 路径、subagent 文件列表、Gateway 目录、records、FAIL/WARN  
-2. 贴结构预检全文  
-3. 结构/合并绿 ≠ 比例合格 ≠ 结算  
+工作目录：包内文档所在的 `采集用户说明_final/`（或用户仓库中等价根）。
 
 ## 权威口径
 
-- [../甲方要求说明.md](../甲方要求说明.md)  
 - [../用户操作步骤.md](../用户操作步骤.md)  
 - [../Gateway采集说明.md](../Gateway采集说明.md)  
+- [../甲方要求说明.md](../甲方要求说明.md)  
 - [../甲方数据包参考样例/](../甲方数据包参考样例/)  

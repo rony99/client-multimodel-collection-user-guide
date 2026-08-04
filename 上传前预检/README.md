@@ -1,42 +1,16 @@
-# 上传前结构预检
+# 上传前预检
 
-只检查文件结构与完整性。**不查集合过题比例。**  
-结构绿 ≠ 比例合格 ≠ 结算；**最终以甲方实际审核为准。**
-
-可选：**Session + Gateway → 甲方 call-level**（见 [SKILL.md](./SKILL.md) §B）。
-
-## 合并 call-level 用户输入（推荐）
-
-只需 **两个根目录 + Session ID**（两边同名）：
-
-| 输入 | 含义 |
-| --- | --- |
-| `--session-root` | Claude 原生 session 目录 → `<sid>.jsonl` 主会话；可选同名文件夹 `<sid>/` 下 subagent |
-| `--gateway-root` | Gateway 根（如 `~/.claude_lproxy/projects`）→ `<sid>/*.json` 全部 call |
-| `--session-id` | Session ID |
+用户**只需提供一个**已整理好的**甲方数据包目录路径**。  
+未提供路径时：Agent 先询问，勿开跑、勿猜路径。
 
 ```bash
-python3 scripts/merge_call_level.py \
-  --session-root ~/.claude/projects/<encoded_cwd> \
-  --gateway-root ~/.claude_lproxy/projects \
-  --session-id <SessionID> \
-  --out /tmp/call_level.jsonl \
-  --check
+# §A 结构
+python3 scripts/presubmit_check.py --task-dir <数据包> --markdown
+
+# §B 包内 session + cc-gateway-log 合并校验（同一路径）
+python3 scripts/merge_call_level.py --package <数据包> --check
 ```
 
-## 交卷结构（检查什么）
-
-- 甲方原格式数据包 + 每模型 **`session/` + `cc-gateway-log/`**
-- 可选 `call_level.jsonl`
-- 不要交同题多 run 旁路目录
-
-## 脚本
-
-| 脚本 | 用途 |
-| --- | --- |
-| [scripts/presubmit_check.py](./scripts/presubmit_check.py) | 结构预检 |
-| [scripts/merge_call_level.py](./scripts/merge_call_level.py) | session 根 + Gateway 根 + sid → call-level |
-| [scripts/validate_call_level.py](./scripts/validate_call_level.py) | call-level 字段校验 |
-| [scripts/call_level_lib.py](./scripts/call_level_lib.py) | 解析 / 配对 / 校验 |
-
-Fixture：[fixtures/merge_sample/](./fixtures/merge_sample/)
+两段都只读该数据包；**不**回源本机 Claude / Gateway 原始目录。  
+结构/合并绿 ≠ 结算；**最终以甲方实际审核为准。**  
+完整 Agent 规则：[SKILL.md](./SKILL.md)。

@@ -3,3 +3,9 @@
 __pycache__/
 *.pyc
 .precheck-runs/
+# Gateway secrets (never commit)
+cc-gateway/**/providers.yaml
+cc-gateway/**/providers.claude.settings.json
+**/providers.yaml
+!**/providers.example.yaml
+**/providers.claude.settings.json

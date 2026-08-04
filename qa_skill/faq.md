@@ -10,25 +10,27 @@ Agent 回答用户问题以本文件为准。每题格式：**结论** → **要
 
 ### A1. 平台会提供模型 API 吗？可以用自己的账号吗？
 
-**结论：提供本地 Gateway（cc-gateway）程序与用法；不提供模型 API。用你自己的账号经 Gateway 生成。**
+**结论：仓库内提供预编译本地 Gateway（`cc-gateway/`）；不提供模型 API。用你自己的账号经 Gateway 生成。**
 
 - 正式对比模型仍为三套：`claude-opus-4.8` / `glm-5.2` / `qwen-3.7-max`  
 - 配置 `providers.yaml` 的 `active`：`A` GLM / `B` 千问 / `C` 官方 Opus 订阅  
-- **须先启动 Gateway**，再用 `claude --settings …/providers.claude.settings.json`  
+- **正式采题前必须做 §0 接通自检**（三套都能通 + 抓包目录名=Session ID=Claude Code 会话 ID）  
+- **须先启动 Gateway 并全程保持**，再用 `claude --settings …/providers.claude.settings.json`  
 - Gateway 日志：本机 `<root_dir>/<sessionId>/*.json` → 交卷 `trajectories/<模型>/cc-gateway-log/`  
-- 交卷：数据包 + 每模型 **`session/` + `cc-gateway-log/`**
+- 交卷：数据包 + 每模型 **`session/` + `cc-gateway-log/`，缺一不可**
 
-**文档**：`Gateway采集说明.md`（完整教程）；`用户操作步骤.md` 第 1 步；`参与方式.md`。
+**文档**：`cc-gateway/README.md`；`Gateway采集说明.md`（§0 自检 + 教程）；`用户操作步骤.md` 第 0、1 步；`参与方式.md`。
 
 ### A2. 采数前要确认什么？
 
-**结论：Gateway 在跑、用了正确 settings、目标模型与 active 一致、抓包目录已写入。**
+**结论：先通 §0 自检；采题时 Gateway 在跑、用了正确 settings、active 对口、抓包已写入；交卷 session 与 Gateway 日志成对。**
 
 - 采千问时不要误开成 Opus；换模型 = 改 `active` → 重启网关 → 新目录新 session。  
-- 核对 `~/.claude_lproxy/projects/<sessionId>/` 有文件，且 JSON 内 `sessionId` 等于文件夹名。  
-- 账号 / 令牌不要写进题目仓库。
+- 核对 `~/.claude_lproxy/projects/<sessionId>/` 有文件，且目录名 = Claude Code 默认 Session ID。  
+- 账号 / 令牌不要写进题目仓库。  
+- **禁止只交 session 或只交 Gateway 日志。**
 
-**文档**：`Gateway采集说明.md` §4–§7；`用户操作步骤.md` 第 1、6、8 步。
+**文档**：`Gateway采集说明.md` §0、§4–§7；`用户操作步骤.md` 第 0、1、6、8 步。
 
 ### A3. Gateway 日志路径？Session ID 是什么？
 
@@ -68,7 +70,9 @@ Agent 回答用户问题以本文件为准。每题格式：**结论** → **要
 
 - 放在 `trajectories/<模型>/session/`。
 - Gateway 抓包放在同模型 `cc-gateway-log/`。
-- 需要甲方 call-level 时：预检合并脚本用 **session 根目录 + Gateway 根目录 + Session ID** 自动找 `<sid>.jsonl`、同名文件夹（subagent）与 Gateway 下 `<sid>/*.json`（见 [上传前预检/SKILL.md](../上传前预检/SKILL.md) §B）。
+- 需要甲方 call-level 时：整理进包后用  
+  `merge_call_level.py --package <任务包> --check`  
+  **只读包内** `session/` + `cc-gateway-log/`（见 [上传前预检/SKILL.md](../上传前预检/SKILL.md) §B）。
 - **禁止**编造 system/tools；request 取 Gateway，response 必要时用 session 补。
 - 用户侧**不要求**手工写 call-level；合并可写 `agents/main_agent.json`。
 - **最终以甲方实际审核为准**。
@@ -302,28 +306,28 @@ Agent 回答用户问题以本文件为准。每题格式：**结论** → **要
 
 ## G. 预检、审核与文档导航
 
-### G1. 上传前预检做什么？
+### G1. 上传前预检做什么？要我提供什么？
 
-**结论：两段能力；默认结构预检 + 可选 call-level 合并检测。均不是集合比例检查，也不是终审。**
+**结论：你只要提供「数据包目录路径」这一个地址。**
 
-| 段 | 输入 | 作用 |
-| --- | --- | --- |
-| **§A 结构** | 提交根 / 数据包路径 | 文件是否齐全、`trajectories/` 每模型 `session/`+`cc-gateway-log/`、meta 等 |
-| **§B call-level** | **session 根目录 + Gateway 根目录 + Session ID** | 合并甲方 call-level、校验字段；可写 `agents/main_agent.json` |
+| 段 | 用不用别的路径 |
+| --- | --- |
+| §A 结构 | 否，就是这个包 |
+| §B 合并校验 | 否，仍是这个包里的 `session/` + `cc-gateway-log/` |
 
-- 不覆盖：集合过题比例（须自核）；Docker Baseline/GT 实测；甲方终审。  
-- `PRECHECK_PASS` / call-level PASS ≠ 比例合格 ≠ 结算。  
-- 用法：加载 `上传前预检/SKILL.md`，按用户要做的段索取路径（§B **不要**只靠任务包路径）。
+- **没给路径**：Agent / 支持方会先问你，再跑检查。  
+- 不需要本机 `~/.claude` 或 Session ID 列表（ID 从包内读）。  
+- 加载 `上传前预检/SKILL.md` 执行；绿 ≠ 结算。
 
-### G1b. call-level 合并要交什么路径？
+### G1b. call-level 合并用什么路径？
 
-**结论：三项即可，两边同名 Session ID。**
+**结论：同一数据包路径。**
 
-1. session 根：`~/.claude/projects/<工作目录编码>/` → `<sid>.jsonl` + 可选同名文件夹  
-2. Gateway 根：`~/.claude_lproxy/projects` → `<sid>/*.json`  
-3. Session ID  
+```bash
+python3 上传前预检/scripts/merge_call_level.py --package <任务包> --check
+```
 
-详见 `上传前预检/SKILL.md` §B。
+详见 `上传前预检/SKILL.md`。
 
 ### G2. 文档应该先看哪个？
 
@@ -403,7 +407,7 @@ Agent 回答用户问题以本文件为准。每题格式：**结论** → **要
 | 不同题面 / instruction | E2 | A 业务 |
 | 一 session 多题 / 多任务一个 session | E4 | A 业务 |
 | 预检 / 审核 | C4, G1, G1b, G3 | A 业务 |
-| call-level 三项路径 | G1b, B2, D5 | A 业务 |
+| call-level 包内合并 | G1b, B2, D5 | A 业务 |
 | 报名 / 参与 / 栗子 / 进群 | G4 | A 业务 |
 | 轮次 / turns / 20 / 100 | C2, F1 | A 业务 |
 | 题量 / <3 道 / 分布 | C3 | A 业务 |

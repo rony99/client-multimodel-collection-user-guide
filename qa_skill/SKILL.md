@@ -3,7 +3,7 @@ name: client-harbor-collection-qa
 description: >-
   回答甲方公司 Harbor 众包采集用户的常见问题：Gateway 与自备账号、日志回传、
   什么叫通过、一条数据是什么、每题每模型 1 条轨迹、集合过题比例、轮次门槛、
-  预审核 vs 甲方终审、Baseline/GT、session 在哪找、call-level 合并三项路径、
+  预审核 vs 甲方终审、Baseline/GT、session 在哪找、包内 call-level 合并、
   Claude Code 工具用法等。
   项目/交卷类问题严格按本包文档；工具/费用等非业务问题可结合常识或检索辅助回答并标注免责。
   用户问 FAQ、交卷规则、合格标准、操作疑惑时加载本 Skill。
@@ -25,7 +25,9 @@ description: >-
 2. **严格按文档理解回答**；**不要臆造**门槛数字或「可以省略」的例外。
 3. 先给结论（可以 / 不可以 / 具体数字），硬要求与文档红字一致。
 4. 文档未写清 → 以本包文档为准；仍不确定则说明 **「最终以甲方实际审核为准」**，并指路章节。
-5. 查「文件齐不齐」或「session+Gateway 合并 call-level」→ 引导 [../上传前预检/SKILL.md](../上传前预检/SKILL.md)（§A / §B）；**本 Skill 不跑预检脚本**。
+5. 用户要「预检 / 文件齐不齐 / 合并校验」→ 引导 [../上传前预检/SKILL.md](../上传前预检/SKILL.md)：  
+   **用户只需提供一个数据包路径**；没有路径则先让用户给路径。  
+   有路径后 Agent 按该 Skill 跑脚本；**本 qa Skill 不跑预检脚本**。
 
 ### B. 非业务 / 工具类问题（Agent 辅助）
 
@@ -48,7 +50,7 @@ description: >-
 | 单次 eval 通过 | 该次做题结果上 `test.sh` 退出码 `0` |
 | 集合比例合格 | **≥3 题**；**每题千问均挂**；禁三模型全过；Opus≤60%；Opus−千问>20%；GLM≥1 道过；turns≥20（**自核，结构脚本不查**） |
 | 结构预检通过 | 仅文件结构与完整性检查通过 |
-| call-level 合并 | 预检 §B：session 根 + Gateway 根 + Session ID → `call_level.jsonl`（字段 PASS ≠ 终审） |
+| call-level 合并 | 预检 §B：`--package` 包内 `session/`+`cc-gateway-log/` → `call_level.jsonl`（≠ 终审） |
 | 平台 API | **不提供**；用户自备账号经 Gateway |
 | 终审通过 | **以甲方实际审核为准** |
 
