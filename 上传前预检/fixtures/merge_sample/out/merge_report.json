@@ -1,0 +1,98 @@
+{
+  "session_id": "11111111-aaaa-bbbb-cccc-222222222222",
+  "gateway_source": "local-cc",
+  "gateway_files": 3,
+  "candidates": 2,
+  "assistant_turns": 2,
+  "records": 2,
+  "skipped": [
+    {
+      "path": "/Users/rony/me/shixian/collect_code/甲方要求/阿里多模型比对/v_1.1_0711/采集用户说明_final/上传前预检/fixtures/merge_sample/gateway/11111111-aaaa-bbbb-cccc-222222222222/probe-title.json",
+      "reason": "no_tools"
+    }
+  ],
+  "issues": [
+    {
+      "level": "PASS",
+      "code": "GATEWAY_SESSION_DIR",
+      "message": "Gateway 会话目录：/Users/rony/me/shixian/collect_code/甲方要求/阿里多模型比对/v_1.1_0711/采集用户说明_final/上传前预检/fixtures/merge_sample/gateway/11111111-aaaa-bbbb-cccc-222222222222（3 个 *.json call）"
+    },
+    {
+      "level": "PASS",
+      "code": "SUBAGENT_FILES",
+      "message": "subagent 轨迹 1 个：explorer-001.jsonl"
+    },
+    {
+      "level": "PASS",
+      "code": "SESSION_DIR",
+      "message": "存在同名 session 目录（常含 subagent）：/Users/rony/me/shixian/collect_code/甲方要求/阿里多模型比对/v_1.1_0711/采集用户说明_final/上传前预检/fixtures/merge_sample/session_root/11111111-aaaa-bbbb-cccc-222222222222"
+    },
+    {
+      "level": "PASS",
+      "code": "MAIN_SESSION",
+      "message": "主会话：/Users/rony/me/shixian/collect_code/甲方要求/阿里多模型比对/v_1.1_0711/采集用户说明_final/上传前预检/fixtures/merge_sample/session_root/11111111-aaaa-bbbb-cccc-222222222222.jsonl"
+    },
+    {
+      "level": "PASS",
+      "code": "GW_CANDIDATES",
+      "message": "交付候选 2 条（源=local-cc）"
+    },
+    {
+      "level": "PASS",
+      "code": "SESSION_ASSISTANT",
+      "message": "assistant 轮次 2"
+    },
+    {
+      "level": "PASS",
+      "code": "MERGE_OK",
+      "message": "已合并 2 条 call-level"
+    },
+    {
+      "level": "PASS",
+      "code": "WRITE_JSONL",
+      "message": "写出主 call-level：/Users/rony/me/shixian/collect_code/甲方要求/阿里多模型比对/v_1.1_0711/采集用户说明_final/上传前预检/fixtures/merge_sample/out/call_level.jsonl"
+    },
+    {
+      "level": "PASS",
+      "code": "SUBAGENT_INPUT",
+      "message": "主会话侧 subagent 文件 1 个"
+    },
+    {
+      "level": "WARN",
+      "code": "SUBAGENT_NO_GW",
+      "message": "有 subagent session 文件，但 Gateway 未标出 is_subagent call；subagent 未单独合成"
+    },
+    {
+      "level": "WARN",
+      "code": "SUBAGENT_AGENT_CFG",
+      "message": "有 subagent 轨迹文件，但 Gateway tools 抓包未分出 subagent system；仅写 main_agent.json"
+    },
+    {
+      "level": "PASS",
+      "code": "WRITE_AGENTS",
+      "message": "写出 agents → /Users/rony/me/shixian/collect_code/甲方要求/阿里多模型比对/v_1.1_0711/采集用户说明_final/上传前预检/fixtures/merge_sample/out/agents"
+    },
+    {
+      "level": "PASS",
+      "code": "COUNT",
+      "message": "记录数 2"
+    },
+    {
+      "level": "PASS",
+      "code": "SCHEMA",
+      "message": "字段校验通过（交付规范 §7 摘要）"
+    }
+  ],
+  "pairings": [
+    {
+      "request_id": "call-001-tool",
+      "response_source": "session",
+      "assistant_id": "msg_tool_1"
+    },
+    {
+      "request_id": "call-002-final",
+      "response_source": "session",
+      "assistant_id": "msg_final_2"
+    }
+  ]
+}

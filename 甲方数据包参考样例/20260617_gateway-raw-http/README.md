@@ -3,9 +3,16 @@
 Labels: `python` / `feature` / `Backend_Infrastructure`  
 Rubric task type: `code_generation`
 
-本目录保持**甲方 Harbor 原格式**（题面 / 环境 / 测试 / GT / rubric / meta / `trajectories/` 等）。
+本目录保持 **Harbor 甲方原格式**。轨迹示意：**三模型各 1 条**主会话。
 
-正式交卷时，在本包**旁边**再交平级目录 [`../multi-sessions/`](../multi-sessions/)：三模型多次独立 session + 通过情况 `manifest.json`。
+```text
+trajectories/
+  claude-opus-4-8/session.jsonl
+  glm-5.2/session.jsonl
+  qwen-3.7-max/session.jsonl   # 本例另有 subagents/（有委派时交齐）
+```
+
+正式交卷只需本结构；**不要**再交同题多 run 的 `multi-sessions/`。
 
 | 内容 | 路径 |
 | --- | --- |
@@ -14,6 +21,6 @@ Rubric task type: `code_generation`
 | 测试 | `tests/` |
 | 标准答案 | `ground_truth/`（`solution/solve.sh` 可选） |
 | Rubrics / meta | `rubrics/`、`meta.json`、`task.toml`、`manifest.json` |
-| 包内轨迹（甲方结构） | `trajectories/<model>/` |
+| 正式轨迹 | `trajectories/<model>/`（**每模型 1 条**主会话） |
 
-字段以 [甲方要求说明.md](../../甲方要求说明.md) 为准。
+字段以 [甲方要求说明.md](../../甲方要求说明.md) 为准。采集与 Gateway 日志见 [Gateway采集说明.md](../../Gateway采集说明.md)。

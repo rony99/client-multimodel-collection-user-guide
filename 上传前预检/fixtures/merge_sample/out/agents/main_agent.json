@@ -1,0 +1,51 @@
+{
+  "system": [
+    {
+      "type": "text",
+      "text": "You are Claude Code."
+    },
+    {
+      "type": "text",
+      "text": "x-anthropic-billing-header: cc_version=test;"
+    }
+  ],
+  "tools": [
+    {
+      "name": "Bash",
+      "description": "Run a shell command",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      }
+    },
+    {
+      "name": "Read",
+      "description": "Read a file",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      }
+    }
+  ],
+  "source": {
+    "source_type": "gateway_capture",
+    "gateway_source": "local-cc",
+    "request_id": "call-001-tool",
+    "session_id": "11111111-aaaa-bbbb-cccc-222222222222",
+    "path": "/Users/rony/me/shixian/collect_code/甲方要求/阿里多模型比对/v_1.1_0711/采集用户说明_final/上传前预检/fixtures/merge_sample/gateway/11111111-aaaa-bbbb-cccc-222222222222/call-001-tool.json"
+  }
+}

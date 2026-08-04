@@ -1,7 +1,7 @@
 {
   "collected_at": "2026-06-17T15:51:51.208179",
   "phase": "trajectory_collected",
-  "stage": "models-4of4-human-reviewed-runtime-config-captured",
+  "stage": "three-models-one-session-each",
   "task_id": "20260617_gateway-raw-http",
   "bundle_name": "qwen-bench-20260617",
   "baseline_path": "multi_model_compare/repo/gateway",
@@ -38,6 +38,7 @@
     "collected_at": "2026-06-17T18:47:16.151735"
   },
   "notes": [
+    "Sample package: one primary Claude Code session per model under trajectories/ only.",
     "Opus trajectory is marked by actual collected model claude-opus-4-8.",
     "Runtime system prompt and tool definitions are filled from user-supplied Claude Code Gateway capture request_id 2d593910abc6fcc7724ed6dbd5f3866b."
   ],

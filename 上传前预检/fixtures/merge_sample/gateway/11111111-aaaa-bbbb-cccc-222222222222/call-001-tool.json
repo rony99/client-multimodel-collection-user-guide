@@ -1,0 +1,85 @@
+{
+  "id": "call-001-tool",
+  "sessionId": "11111111-aaaa-bbbb-cccc-222222222222",
+  "startedAt": "2026-06-17T10:00:00.000Z",
+  "model": "claude-opus-4-8",
+  "request": {
+    "method": "POST",
+    "path": "/v1/messages",
+    "headers": {},
+    "body": {
+      "model": "claude-opus-4-8",
+      "max_tokens": 1024,
+      "stream": true,
+      "thinking": {
+        "type": "adaptive"
+      },
+      "output_config": {
+        "effort": "high"
+      },
+      "system": [
+        {
+          "type": "text",
+          "text": "You are Claude Code."
+        },
+        {
+          "type": "text",
+          "text": "x-anthropic-billing-header: cc_version=test;"
+        }
+      ],
+      "tools": [
+        {
+          "name": "Bash",
+          "description": "Run a shell command",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "command": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "command"
+            ]
+          }
+        },
+        {
+          "name": "Read",
+          "description": "Read a file",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        }
+      ],
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "List files in /tmp/demo"
+            }
+          ]
+        }
+      ]
+    },
+    "bodyText": "{\"model\": \"claude-opus-4-8\", \"max_tokens\": 1024, \"stream\": true, \"thinking\": {\"type\": \"adaptive\"}, \"output_config\": {\"effort\": \"high\"}, \"system\": [{\"type\": \"text\", \"text\": \"You are Claude Code.\"}, {\"type\": \"text\", \"text\": \"x-anthropic-billing-header: cc_version=test;\"}], \"tools\": [{\"name\": \"Bash\", \"description\": \"Run a shell command\", \"input_schema\": {\"type\": \"object\", \"properties\": {\"command\": {\"type\": \"string\"}}, \"required\": [\"command\"]}}, {\"name\": \"Read\", \"description\": \"Read a file\", \"input_schema\": {\"type\": \"object\", \"properties\": {\"path\": {\"type\": \"string\"}}, \"required\": [\"path\"]}}], \"messages\": [{\"role\": \"user\", \"content\": [{\"type\": \"text\", \"text\": \"List files in /tmp/demo\"}]}]}"
+  },
+  "response": {
+    "statusCode": 200,
+    "headers": {},
+    "body": null,
+    "bodyText": "",
+    "isStreaming": true,
+    "completedAt": "2026-06-17T10:00:01.000Z",
+    "durationMs": 1000
+  }
+}

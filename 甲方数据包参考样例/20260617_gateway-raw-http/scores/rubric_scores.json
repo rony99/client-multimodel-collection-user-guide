@@ -152,7 +152,7 @@
     "pass_rate_diff_qwen_vs_opus": 0.0,
     "notes": "单 session 代表值；四模型均通过。opus 模型 claude-opus-4-8；本题区分度主要体现在轮次与 rubric 加权分（glm 4.55 > opus 4.05 > qwen 3.85 > sonnet 4.1）。"
   },
-  "notes": "4/4 模型轨迹已采集；Opus 轨迹按真实运行模型 claude-opus-4-8 标记。rubric 分数已由 rony 人工复核；agreement_score 为临时 AI 评审与 rony 人工复核的一致性，不等同双人工一致性。system_prompt/tool definitions 已用用户提供的 Claude Code Gateway capture 补入。",
+  "notes": "三模型各 1 条轨迹已采集；Opus 轨迹按真实运行模型 claude-opus-4-8 标记。rubric 分数已由 rony 人工复核；agreement_score 为临时 AI 评审与 rony 人工复核的一致性，不等同双人工一致性。system_prompt/tool definitions 已用用户提供的 Claude Code Gateway capture 补入。",
   "quality_gate_status": "not_applicable_single_run_per_model",
   "quality_gate_note": "Each model currently has one representative run; pass-rate thresholds require multiple independent runs and second human review.",
   "model_substitution": {

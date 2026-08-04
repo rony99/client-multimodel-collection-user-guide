@@ -1,0 +1,39 @@
+{
+  "id": "probe-title",
+  "sessionId": "11111111-aaaa-bbbb-cccc-222222222222",
+  "startedAt": "2026-06-17T09:59:59.000Z",
+  "model": "claude-opus-4-8",
+  "request": {
+    "method": "POST",
+    "path": "/v1/messages",
+    "body": {
+      "model": "claude-opus-4-8",
+      "max_tokens": 100,
+      "messages": [
+        {
+          "role": "user",
+          "content": "hi"
+        }
+      ],
+      "system": [
+        {
+          "type": "text",
+          "text": "You are Claude Code."
+        },
+        {
+          "type": "text",
+          "text": "x-anthropic-billing-header: cc_version=test;"
+        }
+      ]
+    }
+  },
+  "response": {
+    "statusCode": 200,
+    "isStreaming": false,
+    "body": {
+      "id": "x",
+      "content": [],
+      "stop_reason": "end_turn"
+    }
+  }
+}

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""上传前结构预检（众包用户包）。不验证三模型 pass@4 / 正式通过率。
+"""上传前结构预检（众包用户包）。不验证集合过题比例。
 
-交卷根目录须含两个平级部分：
-  <task_id>/         — 甲方原格式数据包（含 instruction / tests / trajectories 等）
-  multi-sessions/    — 附加：三模型多次 session + manifest.json（通过情况）
+交卷根目录（或直接指向）甲方原格式数据包：
+  <task_id>/  — instruction / tests / trajectories（每模型 1 条）等
+不再要求平级 multi-sessions/ 或同题 pass@4。
 """
 
 from __future__ import annotations
@@ -28,10 +28,11 @@ SECRET_RE = re.compile(
 )
 
 DISCLAIMER = (
-    "本预审只检查文件是否存在、字段是否齐全、结构是否合理，"
-    "**不代表审核通过**。"
-    "正式合格须自行验证三模型通过率 / 区分度（含 Opus pass@4≤60%、偏序、平台分差等），"
-    "**以实现网和甲方的后期审核为准**。"
+    "本检查只做**结构预检**（文件是否存在、字段是否齐全、结构是否合理），"
+    "**不查集合过题比例**，**不代表结算或最终合格**。"
+    "请自行核验：题量要求≥3；**每题千问均挂**；禁三模型全过、Opus≤60%、Opus−千问>20%、GLM≥1 道过等；"
+    "平台不代提供模型 API；"
+    "**最终以甲方实际审核为准**。"
 )
 
 
@@ -100,12 +101,13 @@ def _looks_like_sessions(d: Path) -> bool:
 
 
 def resolve_layout(root: Path) -> Layout:
-    # Case: --task-dir 直接指向甲方数据包，旁边有 multi-sessions/
+    # Case: --task-dir 直接指向甲方数据包
     if _looks_like_package(root):
         for name in SESSIONS_DIR_NAMES:
             sibling = root.parent / name
             if sibling.is_dir():
                 return Layout(root=root.parent, package=root, sessions=sibling)
+        return Layout(root=root.parent, package=root, sessions=None)
 
     sess = _pick_named_subdir(root, SESSIONS_DIR_NAMES)
     pkg = _pick_named_subdir(root, PACKAGE_DIR_ALIASES)
@@ -134,12 +136,12 @@ def resolve_layout(root: Path) -> Layout:
 
 
 def check_layout(layout: Layout, report: Report) -> bool:
-    """校验平级「甲方数据包 + multi-sessions」；返回是否可继续深检。"""
+    """校验甲方数据包存在；勿交 multi-sessions 等旁路多 run 目录。"""
     if layout.package is None:
         report.add(
             "FAIL",
             "LAYOUT_PACKAGE",
-            "缺失甲方原格式数据包目录（须含 instruction.md + tests/test.sh；与 multi-sessions/ 平级）",
+            "缺失甲方原格式数据包目录（须含 instruction.md + tests/test.sh）",
         )
     else:
         report.add(
@@ -149,42 +151,14 @@ def check_layout(layout: Layout, report: Report) -> bool:
         )
         report.package_dir = str(layout.package)
 
-    if layout.sessions is None:
+    if layout.sessions is not None:
         report.add(
-            "FAIL",
+            "WARN",
             "LAYOUT_SESSIONS",
-            "缺失与数据包平级的 multi-sessions/（三模型多次 session + manifest.json）",
+            f"检测到旁路 {layout.sessions.name}/：正式勿交；仅保留 trajectories/ 下每模型 1 条",
         )
-    else:
-        report.add(
-            "PASS",
-            "LAYOUT_SESSIONS",
-            f"附加多 session：{layout.sessions.name}/（与数据包平级）",
-        )
-        report.sessions_dir = str(layout.sessions)
 
-    if layout.package and layout.sessions:
-        if layout.package.parent.resolve() != layout.sessions.parent.resolve():
-            report.add("FAIL", "LAYOUT_SIBLING", "甲方数据包与 multi-sessions/ 必须平级（同一父目录）")
-            return False
-        if layout.package.resolve() == layout.sessions.resolve():
-            report.add("FAIL", "LAYOUT_SIBLING", "甲方数据包与 multi-sessions 不能是同一路径")
-            return False
-        report.add("PASS", "LAYOUT_SIBLING", f"{layout.package.name}/ 与 {layout.sessions.name}/ 平级")
-
-    # multi-sessions/manifest.json 必填
-    if layout.sessions:
-        mf = layout.sessions / "manifest.json"
-        if mf.is_file():
-            report.add("PASS", "MANIFEST", "存在 multi-sessions/manifest.json")
-        else:
-            report.add(
-                "FAIL",
-                "MANIFEST",
-                "缺失 multi-sessions/manifest.json（须说明每个 session_id↔模型↔是否通过测试）",
-            )
-
-    return layout.package is not None and layout.sessions is not None
+    return layout.package is not None
 
 
 def check_dirname(package: Path, report: Report) -> None:
@@ -222,26 +196,16 @@ def check_core_files(package: Path, report: Report) -> None:
         p = package / rel
         if p.exists():
             report.add("PASS", code, f"存在：{rel}")
-        else:
-            report.add("WARN", code, f"建议提供：{rel}")
+        # 缺可选文件不打 WARN，避免几乎无法 PRECHECK_PASS
 
-    # reports 可在 package 或根下
     root = package.parent
     if (package / "reports").is_dir() or (root / "reports").is_dir():
         report.add("PASS", "REPORTS", "存在 reports/（package 内或根下）")
-    else:
-        report.add("WARN", "REPORTS", "建议提供 reports/")
 
     gt = package / "ground_truth"
     solve = package / "solution" / "solve.sh"
     if gt.is_dir() or solve.is_file():
         report.add("PASS", "GT", "存在标准答案（ground_truth/ 和/或 solution/solve.sh）")
-        if not solve.is_file():
-            report.add(
-                "WARN",
-                "SOLVE_SH",
-                "未提供 solution/solve.sh（可选：已有可用 ground_truth/ 时不必强制）",
-            )
     else:
         report.add("FAIL", "GT", "缺失标准答案：需要 ground_truth/ 或 solution/solve.sh")
 
@@ -387,16 +351,29 @@ def check_workspace_clean(package: Path, report: Report) -> None:
         report.add("PASS", "WS_SIZE", f"workspace 文件数约 {len(files)}")
 
 
+# Generated call-level / derived JSONL are not “主会话”
+_AUX_TRAJ_JSONL = frozenset({"call_level.jsonl", "calls.jsonl"})
+
+
 def _find_sessions(model_dir: Path) -> list[Path]:
+    """Top-level main Claude session .jsonl only (exclude call_level)."""
     found: list[Path] = []
     if not model_dir.is_dir():
         return found
     for p in sorted(model_dir.glob("*.jsonl")):
+        if p.name in _AUX_TRAJ_JSONL:
+            continue
         found.append(p)
+    # prefer session.jsonl
+    found.sort(key=lambda p: (0 if p.name == "session.jsonl" else 1, p.name))
     return found
 
 
 def check_model_sessions(sessions_root: Path, report: Report) -> None:
+    """检查 trajectories/（或兼容传入的 sessions 根）下每模型 1 条轨迹。"""
+    if not sessions_root.is_dir():
+        report.add("FAIL", "TRAJ_ROOT", f"缺失轨迹目录：{sessions_root}")
+        return
     present = {p.name for p in sessions_root.iterdir() if p.is_dir()}
     for model in REQUIRED_MODELS:
         candidates = [model]
@@ -411,7 +388,7 @@ def check_model_sessions(sessions_root: Path, report: Report) -> None:
             report.add(
                 "FAIL",
                 f"TRAJ_{model}",
-                f"缺少模型目录 multi-sessions/{model}/（opus 也可用 claude-opus-4-8）",
+                f"缺少模型目录 {sessions_root.name}/{model}/（opus 也可用 claude-opus-4-8）",
             )
             continue
         report.add("PASS", f"TRAJ_{model}", f"存在模型目录 {sessions_root.name}/{hit.name}")
@@ -419,28 +396,20 @@ def check_model_sessions(sessions_root: Path, report: Report) -> None:
         if not sessions:
             report.add("FAIL", f"SESSION_{model}", f"{hit.name}/ 下未找到主 session .jsonl")
             continue
-        is_opus = hit.name in ALT_OPUS or model == "claude-opus-4.8"
-        if is_opus:
-            if len(sessions) >= 2:
-                report.add(
-                    "PASS",
-                    "OPUS_SESSIONS_MIN",
-                    f"Opus 轨迹 {len(sessions)} 份（≥2，可用于核验通过率；建议 4 份对齐 pass@4）",
-                )
-            else:
-                report.add(
-                    "FAIL",
-                    "OPUS_SESSIONS_MIN",
-                    f"Opus 仅 {len(sessions)} 份轨迹；除甲方数据包外须至少 2 次以上独立 session 以核验通过率（建议交齐 4 次）",
-                )
-        elif len(sessions) > 1:
+        if len(sessions) == 1:
             report.add(
                 "PASS",
-                f"SESSION_MULTI_{model}",
-                f"{hit.name}/ 含 {len(sessions)} 个 session.jsonl（多 run 已登记）",
+                f"SESSION_COUNT_{model}",
+                f"{hit.name}/ 含 1 条主轨迹（符合每模型只交 1 条）",
+            )
+        else:
+            report.add(
+                "FAIL",
+                f"SESSION_COUNT_{model}",
+                f"{hit.name}/ 含 {len(sessions)} 条顶层 .jsonl；正式须仅 1 条主会话（subagent 请放 subagents/）",
             )
         main = sessions[0]
-        report.add("PASS", f"SESSION_{model}", f"主 session 示例：{sessions_root.name}/{hit.name}/{main.name}")
+        report.add("PASS", f"SESSION_{model}", f"主 session：{sessions_root.name}/{hit.name}/{main.name}")
         try:
             lines = main.read_text(encoding="utf-8", errors="replace").splitlines()
         except OSError as e:
@@ -466,16 +435,18 @@ def check_model_sessions(sessions_root: Path, report: Report) -> None:
                 f"TURNS_{model}",
                 f"{hit.name} 未能从 jsonl 粗估轮次，请人工确认平均 assistant 执行轮次 ≥20",
             )
+        call_level = hit / "call_level.jsonl"
+        if call_level.is_file():
+            report.add(
+                "PASS",
+                f"CALL_LEVEL_{model}",
+                f"{hit.name}/call_level.jsonl 存在（session+Gateway 合并产物；本预检不验字段细节）",
+            )
         sub_a = hit / "subagents"
         sub_b = list(hit.glob("*/subagents"))
         if sub_a.is_dir() or sub_b:
             report.add("PASS", f"SUBAGENT_{model}", f"{hit.name} 含 subagent 目录")
-        else:
-            report.add(
-                "WARN",
-                f"SUBAGENT_{model}",
-                f"{hit.name} 未见 subagent 目录（若本次无委派可忽略）",
-            )
+        # 无 subagent 不打 WARN（多数跑次无委派）
 
     for old in ("claude-sonnet-4.6", "glm-5.1"):
         if old in present:
@@ -486,79 +457,98 @@ def check_model_sessions(sessions_root: Path, report: Report) -> None:
             )
 
 
-def check_manifest_sessions(sessions_root: Path, report: Report) -> None:
-    path = sessions_root / "manifest.json"
-    if not path.is_file():
-        return
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as e:
-        report.add("FAIL", "MANIFEST_JSON", f"multi-sessions/manifest.json 不是合法 JSON：{e}")
-        return
-    models = data.get("models")
-    if not isinstance(models, list) or not models:
-        report.add(
-            "WARN",
-            "MANIFEST_MODELS",
-            "multi-sessions/manifest.json 建议含 models[]：每项含 session_id、model_id、eval_pass",
-        )
-        return
-    missing = []
-    for i, row in enumerate(models):
-        if not isinstance(row, dict):
-            missing.append(f"[{i}] 非对象")
-            continue
-        for key in ("session_id", "model_id"):
-            if not row.get(key):
-                missing.append(f"[{i}].{key}")
-        if "eval_pass" not in row and "passed" not in row and "reward" not in row:
-            missing.append(f"[{i}].eval_pass")
-    if missing:
-        report.add(
-            "WARN",
-            "MANIFEST_FIELDS",
-            "manifest.models 字段不完整（需要 session_id / model_id / eval_pass）：" + ", ".join(missing[:8]),
-        )
-    else:
-        report.add(
-            "PASS",
-            "MANIFEST_FIELDS",
-            f"multi-sessions/manifest.models 含 {len(models)} 条 session_id↔模型↔是否通过测试",
-        )
-
-
 def check_no_agents_required(package: Path, report: Report) -> None:
     agents = package / "agents"
     if agents.exists():
-        report.add(
-            "WARN",
-            "AGENTS_PRESENT",
-            "存在 agents/：众包用户可不交此项；预检不强制检查其内容",
-        )
+        main = agents / "main_agent.json"
+        if main.is_file():
+            report.add(
+                "PASS",
+                "AGENTS_PRESENT",
+                "存在 agents/main_agent.json（可由 session+Gateway 合并写入；用户可不手写）",
+            )
+        else:
+            report.add(
+                "WARN",
+                "AGENTS_PRESENT",
+                "存在 agents/ 但无 main_agent.json；预检不强制，交付甲方时建议齐",
+            )
     else:
-        report.add("PASS", "AGENTS_OPTIONAL", "未要求用户提交 agents/（符合本包口径）")
+        report.add("PASS", "AGENTS_OPTIONAL", "未要求用户手写 agents/（可用合并脚本从 Gateway 生成）")
 
 
-def run_check(root: Path) -> Report:
-    report = Report(task_dir=str(root))
-    layout = resolve_layout(root)
-    ok = check_layout(layout, report)
-    if not ok or layout.package is None or layout.sessions is None:
-        report.finalize()
-        return report
+def discover_packages(root: Path) -> list[Path]:
+    """发现提交根下全部甲方数据包；若 root 本身是包则只返回它。"""
+    if _looks_like_package(root):
+        return [root]
+    kids = [p for p in sorted(root.iterdir()) if p.is_dir() and not p.name.startswith(".")]
+    pkgs = [
+        p
+        for p in kids
+        if _looks_like_package(p) and p.name not in SESSIONS_DIR_NAMES and p.name != "模板"
+    ]
+    return pkgs
 
-    package = layout.package
-    sessions = layout.sessions
+
+def check_one_package(package: Path, root: Path, report: Report) -> None:
+    report.add("PASS", "PKG_BEGIN", f"—— 检查数据包：{package.name}/ ——")
     check_dirname(package, report)
     check_core_files(package, report)
     check_instruction(package, report)
     check_task_toml(package, report)
-    check_meta(layout.root, package, report)
+    check_meta(root, package, report)
     check_rubrics(package, report)
     check_workspace_clean(package, report)
-    check_model_sessions(sessions, report)
-    check_manifest_sessions(sessions, report)
+    traj = package / "trajectories"
+    if traj.is_dir():
+        if not report.sessions_dir:
+            report.sessions_dir = str(traj)
+        check_model_sessions(traj, report)
+    else:
+        report.add("FAIL", "TRAJ_ROOT", f"{package.name}/ 缺失 trajectories/（每模型正式轨迹各 1 条）")
     check_no_agents_required(package, report)
+
+
+def run_check(root: Path) -> Report:
+    report = Report(task_dir=str(root))
+    packages = discover_packages(root)
+    sess = None
+    if not _looks_like_package(root):
+        sess = _pick_named_subdir(root, SESSIONS_DIR_NAMES)
+    else:
+        for name in SESSIONS_DIR_NAMES:
+            sibling = root.parent / name
+            if sibling.is_dir():
+                sess = sibling
+                break
+
+    if not packages:
+        report.add(
+            "FAIL",
+            "LAYOUT_PACKAGE",
+            "缺失甲方原格式数据包目录（须含 instruction.md + tests/test.sh）",
+        )
+        report.finalize()
+        return report
+
+    report.add(
+        "PASS",
+        "LAYOUT_PACKAGE",
+        f"发现 {len(packages)} 个甲方数据包：" + ", ".join(p.name for p in packages),
+    )
+    report.package_dir = ", ".join(str(p) for p in packages)
+
+    if sess is not None:
+        report.add(
+            "WARN",
+            "LAYOUT_SESSIONS",
+            f"检测到旁路 {sess.name}/：正式勿交；每题每模型只交 trajectories/ 下 1 条主会话",
+        )
+
+    scan_root = root if not _looks_like_package(root) else root.parent
+    for package in packages:
+        check_one_package(package, scan_root, report)
+
     report.finalize()
     return report
 
@@ -569,8 +559,8 @@ def format_markdown(report: Report) -> str:
         "",
         f"- 提交根目录：`{report.task_dir}`",
         f"- 甲方数据包：`{report.package_dir or '（未解析）'}`",
-        f"- 多模型 session：`{report.sessions_dir or '（未解析）'}`",
-        f"- 预审结论：**{report.verdict}**",
+        f"- 轨迹目录：`{report.sessions_dir or '（未解析）'}`",
+        f"- 结构预检结论：**{report.verdict}**",
         f"- 统计：FAIL={report.summary.get('FAIL', 0)} / WARN={report.summary.get('WARN', 0)} / PASS={report.summary.get('PASS', 0)}",
         "",
         f"> {report.disclaimer}",
@@ -583,11 +573,11 @@ def format_markdown(report: Report) -> str:
     lines.extend(
         [
             "",
-            "## 预审未覆盖（须自行验证，以实现网和甲方的后期审核为准）",
+            "## 结构预检未覆盖（须自行验证；最终以甲方实际审核为准）",
             "",
-            "- Opus 同一题独立 4 次 pass@4 ≤ 60%",
-            "- 偏序：opus > glm > qwen",
-            "- 平台：Opus−千问 ≥ 20%；GLM 略高于千问；多题批次 ≥50% Opus 至少一次通过",
+            "- 集合：题量≥3；**每题千问均挂**；禁三模型全过；Opus 过题率 ≤ 60%；Opus−千问 > 20%；GLM ≥ 1 道过",
+            "- 平均 assistant 执行轮次 ≥ 20；私有题意（禁止直接改造公开 GitHub Issue）",
+            "- 每模型每题 1 条轨迹；平台不代提供模型 API（用户自备经 Gateway）",
             "- Docker 内 Baseline FAIL / GT PASS 的完整复现（本脚本默认不做 Docker 构建）",
             "- Rubric 人工/LLM 打分是否与测试结论一致",
             "",
@@ -598,13 +588,13 @@ def format_markdown(report: Report) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="众包任务包上传前结构预检（须含平级甲方数据包 + multi-sessions/）"
+        description="众包任务包上传前结构预检（甲方数据包 + trajectories/ 每模型 1 条）"
     )
     parser.add_argument(
         "--task-dir",
         type=Path,
         required=True,
-        help="待提交根目录（内含甲方原格式数据包与 multi-sessions/），或直接指向数据包（旁边须有 multi-sessions/）",
+        help="待提交根目录（内含甲方原格式数据包），或直接指向数据包目录",
     )
     parser.add_argument("--json", type=Path, default=None, help="可选：写出 JSON 报告")
     parser.add_argument("--markdown", action="store_true", help="stdout 输出 Markdown")

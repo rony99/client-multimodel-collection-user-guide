@@ -8,27 +8,37 @@ Agent 回答用户问题以本文件为准。每题格式：**结论** → **要
 
 ## A. 模型与连接
 
-### A1. 是否可以使用自己的模型 / 自己的 API？
+### A1. 平台会提供模型 API 吗？可以用自己的账号吗？
 
-**结论：不可以。我们会提供 API。**
+**结论：提供本地 Gateway（cc-gateway）程序与用法；不提供模型 API。用你自己的账号经 Gateway 生成。**
 
-- 正式对比模型固定为平台三套：
-  - `claude-opus-4.8`（目录名可用 `claude-opus-4-8`）
-  - `glm-5.2`
-  - `qwen-3.7-max`
-- **平台会提供 API 与连接配置**；须按平台说明配置 Claude Code 后采集。
-- 禁止用自备 API、本地模型或其它云模型**冒充**这三套成绩。
+- 正式对比模型仍为三套：`claude-opus-4.8` / `glm-5.2` / `qwen-3.7-max`  
+- 配置 `providers.yaml` 的 `active`：`A` GLM / `B` 千问 / `C` 官方 Opus 订阅  
+- **须先启动 Gateway**，再用 `claude --settings …/providers.claude.settings.json`  
+- Gateway 日志：`<root_dir>/<sessionId>/*.json`，**文件夹名 = Session ID**  
+- 交卷：数据包 + trajectories + Gateway 日志目录（+ 约定赛讯 / 会话说明）
 
-**文档**：`用户操作步骤.md` 第 1 步；`README.md` FAQ。
+**文档**：`Gateway采集说明.md`（完整教程）；`用户操作步骤.md` 第 1 步；`参与方式.md`。
 
 ### A2. 采数前要确认什么？
 
-**结论：确认当前连的是目标模型。**
+**结论：Gateway 在跑、用了正确 settings、目标模型与 active 一致、抓包目录已写入。**
 
-- 采千问时不要误开成 Opus；换模型前确认平台切换方式。
-- 每次做完保存完整 session（主会话 `.jsonl`；有子 Agent 则一并保存）。
+- 采千问时不要误开成 Opus；换模型 = 改 `active` → 重启网关 → 新目录新 session。  
+- 核对 `~/.claude_lproxy/projects/<sessionId>/` 有文件，且 JSON 内 `sessionId` 等于文件夹名。  
+- 账号 / 令牌不要写进题目仓库。
 
-**文档**：`用户操作步骤.md` 第 1 步、第 6 步。
+**文档**：`Gateway采集说明.md` §4–§7；`用户操作步骤.md` 第 1、6、8 步。
+
+### A3. Gateway 日志路径？Session ID 是什么？
+
+**结论：默认根目录 `~/.claude_lproxy/projects`（或 YAML `root_dir` / 环境 `CCG_DATA_DIR`）；其下每个子目录名即 Session ID。**
+
+- Claude Code 通常通过请求头 `x-claude-code-session-id` 带 UUID，网关用它做目录名。  
+- 一会话多文件正常；整目录保留。  
+- 与交卷的 `trajectories/<模型>/session.jsonl` 的 session 应对齐同一 ID。
+
+**文档**：`Gateway采集说明.md` §7–§8。
 
 ---
 
@@ -40,62 +50,60 @@ Agent 回答用户问题以本文件为准。每题格式：**结论** → **要
 
 | 内容 | 说明 |
 | --- | --- |
-| 甲方数据包 `<task_id>/` | 题面、环境、测试、GT、rubric、meta、`trajectories/` 等（三模型共用同一套材料） |
-| 平级 `multi-sessions/` | **三个模型**各自多次独立 session + `manifest.json` |
+| 甲方数据包 `<task_id>/` | 题面、环境、测试、GT、rubric、meta、`trajectories/` 等 |
+| `trajectories/<模型>/` | **每个模型正式只交 1 条** session |
 
 细分：
 
-- **一道题** → 一个 `<task_id>/` + 一个 `multi-sessions/`
-- **一次 session** → 某模型从干净起点重做一整题留下的一份 `.jsonl`（对应一次是否测过）
-- **pass@4** → 同一模型、同一题独立做 4 次，统计过了几次（**不是** 4 道不同题）
+- **一道题** → 一个 `<task_id>/`
+- **一次 session** → 某模型从干净起点做一整题留下的一份 `.jsonl`
+- **不再要求 pass@4** → 不要同题连跑 4 次再交；比例按你交的多道题统计
 
-**文档**：`README.md` FAQ #3；`甲方要求说明.md` §4.1 pass@4 定义。
+**文档**：`README.md` FAQ；`甲方要求说明.md` §4。
 
 ### B2. 用户交的 session 是什么格式？
 
 **结论：Claude Code 主会话 `.jsonl`（及有则 subagent `.jsonl`）。**
 
-- `trajectories/` 与 `multi-sessions/` 均按此组织。
-- Gateway / Anthropic **call-level** 转换由平台处理；用户不必手写 call-level schema。
-- 用户侧**不要求**交 `agents/` 目录。
+- 放在 `trajectories/<模型>/`。
+- 需要甲方 call-level 时：预检合并脚本用 **session 根目录 + Gateway 根目录 + Session ID** 自动找 `<sid>.jsonl`、同名文件夹（subagent）与 Gateway 下 `<sid>/*.json`（见 [上传前预检/SKILL.md](../上传前预检/SKILL.md) §B）。
+- **禁止**编造 system/tools；request 取 Gateway，response 必要时用 session 补。
+- 用户侧**不要求**手工写 call-level；合并可写 `agents/main_agent.json`。
+- **最终以甲方实际审核为准**。
 
-**文档**：`用户操作步骤.md` 第 6 步末说明。
+**文档**：`用户操作步骤.md` 第 6 / 8 步；`上传前预检/SKILL.md` §B。
 
 ### B3. Baseline 和 Ground Truth 是什么？
 
 **结论：Baseline = 未完成的初始工程；GT = 标准答案，必须与做题目录分开。**
 
-- Baseline → 交卷包里通常是 `environment/workspace/`（**不含**标准答案）。
-- GT → `ground_truth/`（与 workspace 同相对路径的已做对文件）；套上后 `test.sh` 必须全过。
-- 做题目录里**禁止**夹带 `ground_truth` / 答案补丁，否则题可能作废。
+- Baseline → `environment/workspace/`（**不含**标准答案）。
+- GT → `ground_truth/`；套上后 `test.sh` 必须全过。
+- 做题目录里**禁止**夹带答案。
 
 **文档**：`用户操作步骤.md`「强烈建议」、第 2 / 5 步。
 
-### B4. pass@4 怎么算？
+### B4. 还要不要算 pass@4？
 
-**结论：同一题、同一测试口径下，某模型干净重做 4 次，看测试通过几次。**
+**结论：众包日常不要求。**
 
-- 通过 2 次 = 50%；通过 3 次 = 75%。
-- Opus 正式门槛：**pass@4 ≤ 60%**（4 次至多过 2 次）。
-- 不是「交了 4 道不同的题」。
+- 甲方原文可能仍写同题 4 次；本包操作改为**集合过题比例**（见 C 节）。
+- 每模型每题正式只交 **1** 条轨迹。
+- 最终仍以甲方实际审核为准。
 
-**文档**：`甲方要求说明.md` §4.1；`用户操作步骤.md` §7.1。
+**文档**：`用户操作步骤.md` §7；`甲方要求说明.md` §4、附录 Z。
 
 ### B5. 本机做完题，session 文件在哪里找？（交卷前）
 
 **类型：B 类（非业务辅助）；交卷放哪见 D 节**
 
-**本机存放（Claude Code 默认，macOS / Linux 常见）**：
-
 ```text
 ~/.claude/projects/<工作目录编码>/
-  <session_id>.jsonl              # 主会话
-  <session_id>/subagents/*.jsonl  # 有子 Agent 时
+  <session_id>.jsonl
+  <session_id>/subagents/*.jsonl
 ```
 
-- `<工作目录编码>`：做题时当前工作目录路径，把 `/` 换成 `-`。
-- 找「刚做完那次」：进对应 projects 子目录，按修改时间找最新 `.jsonl`；有 `subagents/` 则一并拷贝。
-- 拷走后按 D 节放进 `multi-sessions/` 与（如需）`<task_id>/trajectories/`。
+- 找最新 `.jsonl`，拷到 `<task_id>/trajectories/<模型>/`。
 
 **说明：以上为非业务类型问题，由 Agent 根据通用信息辅助回复，不代表本平台采集规范或最终审核口径。**
 
@@ -109,56 +117,48 @@ Agent 回答用户问题以本文件为准。每题格式：**结论** → **要
 
 1. 在 Docker 内对当次做题结果跑 `tests/test.sh`
 2. 退出码 `0` → 通过；非 `0` → 未通过
-3. 在 `multi-sessions/manifest.json` 用 `eval_pass: true/false` 登记
+3. 自行记下该题该模型过/不过，用于集合比例自检
 
-**文档**：`用户操作步骤.md` §3.1；`README.md` FAQ #2。
+**文档**：`用户操作步骤.md` §3.1。
 
-### C2. 题目怎样才算「合格」（单题）？
+### C2. 怎样才算集合比例合格（自行核，结构脚本不查）？
 
-**结论：须同时满足甲方硬门槛；平台附加也须满足本平台交卷。**
+**结论：单题材料齐全 + 集合比例达标。结构预检绿 ≠ 本条合格。**
 
-| 类型 | 要求 | 人话 |
-| --- | --- | --- |
-| 甲方硬 | 平均 assistant **执行轮次 ≥ 20** | 底线；模型自己干的轮次，不是用户来回聊 |
-| 甲方硬 | Opus **pass@4 ≤ 60%** | 同题独立 4 次至多过 2 次 |
-| 甲方硬 | pass@4 偏序 **Opus > GLM > 千问** | 三模型同题多次统计 |
-| 甲方硬 | Baseline 测挂；套 GT 测过 | 测试有效 |
-| 甲方硬 | 三模型同一份 `instruction.md`（及同一 Baseline / 测试 / Docker） | 不可分题面 |
-| 平台附加 | Opus − 千问 **≥ 20%**（pass@4 差） | 如 Opus 50%、千问 25% → 差 25%，可以 |
-| 平台建议 | GLM 略高于千问 | 无固定差分百分比 |
-| 平台交卷 | 除数据包外必须交 `multi-sessions/`；Opus **≥2** 次轨迹（建议 4） | 核验通过率 |
+| 类型 | 要求 |
+| --- | --- |
+| 单题 | 三模型各 1 条 session；turns 平均 ≥20；Baseline 挂 / GT 过；同一 instruction |
+| 集合 | <span style="color:#d93025">禁「三模型都测通」</span> |
+| 集合 | <span style="color:#d93025">所交**每道题千问均须测不过**</span>（过题率 = 0） |
+| 集合 | <span style="color:#d93025">Opus 过题率 ≤ 60%</span> |
+| 集合 | <span style="color:#d93025">Opus − 千问过题率差 > 20%</span>（千问全挂时 ≈ Opus 率，Opus 宜在 (20%,60%]） |
+| 集合 | <span style="color:#d93025">GLM ≥ 1 道测通</span> |
+| 题量 | <span style="color:#d93025">要求 ≥3</span>；少于 3 可交，是否采纳看整体分布 |
 
-长程 **100+** 轮次为高优**建议**，不能替代 ≥20 底线。
+出题须先保证千问不过再采。n=3 时 Opus 通常只能过 **1** 道才不超 60%。
 
-**文档**：`用户操作步骤.md` §7.1；`甲方要求说明.md` §4.1–4.2。
+**文档**：`用户操作步骤.md` §7；`甲方要求说明.md` §4.2。
 
-### C3. 一次交多道题还有额外规则吗？
+### C3. 少于 3 道可以交吗？
 
-**结论：有（平台批次质量）。**
+**结论：可以交；是否采纳由平台按当期整体数据分布决定。**
 
-- 禁止整批都是「三个模型都测不过」。
-- 所交题目中 **≥ 50%** 须为：Opus 在该题独立多次尝试里**至少有一次**测试通过。
-- 与单题「Opus pass@4 ≤ 60%」不矛盾：题仍要够难，但不能整批「谁都做不出」。
-- 只交 1 道题时：主要看单题门槛；本条主要约束**多题一并提交**。
+不保证**采纳 / 送审**（结构预检仍可能 PASS）。
 
-**文档**：`用户操作步骤.md` §7.1b。
-
-### C4. 预检通过 = 审核通过吗？
+### C4. 结构预检通过 = 结算 / 终审通过吗？
 
 **结论：不等于。**
 
-- 上传前预检：只查文件是否存在、字段是否齐全、结构是否合理。
-- 通过率 / 区分度须用户自测。
-- **最终以实现网和甲方的后期审核为准。**
+- 上传前预检：只查文件结构与完整性。
+- 集合比例须用户自核。
+- **最终以甲方实际审核为准。**
 
-**文档**：`上传前预检/SKILL.md`；`README.md` 预审声明 / FAQ #6。
+### C5. 「单次通过」和「集合比例合格」有什么区别？
 
-### C5. 「题目合格」和「单次通过」有什么区别？
+**结论：单次通过只是一次 `test.sh==0`；集合合格看整批过题比例。**
 
-**结论：单次通过只是一次 `test.sh==0`；题目合格看整题汇总门槛。**
-
-- 某次 Opus 测过了，不代表 pass@4 已 ≤60%，也不代表偏序已满足。
-- 预检绿了，不代表题目合格或终审通过。
+- 某题 Opus 测过了，不代表整批 Opus 过题率已 ≤60%。
+- 结构预检绿了，不代表比例合格或甲方终审通过。
 
 ---
 
@@ -166,49 +166,44 @@ Agent 回答用户问题以本文件为准。每题格式：**结论** → **要
 
 ### D1. 最终要交什么？
 
-**结论：一道题交两块，都要交、平级放置。**
+**结论：一道题一个甲方原格式数据包；每模型 1 条轨迹；并按说明回传 Gateway 日志 + 赛讯日志。**
 
 ```text
 <submit_root>/
-  <task_id>/          # ① 甲方原格式数据包
-  multi-sessions/     # ② 多模型多次 session + manifest.json
+  <task_id>/
+    ...
+    trajectories/
+      claude-opus-4-8/session.jsonl
+      glm-5.2/session.jsonl
+      qwen-3.7-max/session.jsonl
 ```
 
-- 只交①或只交②都不算交齐。
-- 目录名仅允许字母、数字、`._-`（无中文、空格、shell 特殊字符）。
-- `task_id` 须与甲方数据包目录名一致。
+- 目录名仅允许字母、数字、`._-`。
+- `task_id` 须与数据包目录名一致。
 
-**文档**：`README.md`「最终提交长什么样」；`用户操作步骤.md` §8.1。
+**文档**：`用户操作步骤.md` §8.1。
 
-### D2. 只交甲方数据包、不交 multi-sessions 可以吗？
+### D2. 还要不要交 multi-sessions？
 
-**结论：不可以。**
+**结论：不要交。**
 
-- `multi-sessions/` 用于核验各模型多次独立 session 的通过情况（尤其 Opus 通过率）。
-- manifest 每条应含：`session_id`、`model_id`、`eval_pass`（及路径等）。
+- 样例包已**不再包含** `multi-sessions/`。
+- 正式只交包内 `trajectories/<模型>/` 下 **1** 条主会话（有则另加 `subagents/`）。
 
-**文档**：`README.md` FAQ #4；样例 `甲方数据包参考样例/multi-sessions/`。
+### D3. 每个模型交几次 session？
 
-### D3. Opus 要交几次 session？
+**结论：正式交卷每模型每题恰好 1 次。**
 
-**结论：`multi-sessions/` 中 Opus 至少 ≥2 次独立完整 `.jsonl`；建议交齐 4 次。**
+- 试难度时可多跑，但交卷目录里只保留 1 条顶层 `.jsonl`。
+- 不要为 pass@4 刻意交多条；多条会被上传前预检判 FAIL。
 
-- 正式合格数字仍按 **pass@4 ≤ 60%**（建议用满 4 次统计）。
-- 千问 / GLM：至少各有完整轨迹；为算分差建议多次。
+### D4. 包内 `trajectories/` 放什么？
 
-**文档**：`README.md` FAQ #7；`用户操作步骤.md` §8.2。
-
-### D4. 包内 `trajectories/` 和 `multi-sessions/` 是什么关系？
-
-**结论：都要按文档整理；`multi-sessions/` 是与数据包平级的必交附加。**
-
-- 数据包内可有 `trajectories/`（甲方原格式结构）。
-- `multi-sessions/` 专门承载多模型多次独立 run + 通过情况 manifest。
-- 两者都是 Claude Code session `.jsonl` 口径。
+**结论：该题三模型正式提交的 Claude Code 主会话（各 1 条顶层 `.jsonl`）。**
 
 ### D5. 用户需要交 `agents/` 吗？
 
-**结论：不要求。** 用户交主会话（及 subagent）即可；call-level / agents 合并由平台侧处理。
+**结论：不强制手写。** 可用上传前预检的合并脚本从 Gateway 生成 `agents/main_agent.json`；交主会话 + Gateway 日志即可让 Agent 代跑合并。
 
 ---
 
@@ -218,7 +213,7 @@ Agent 回答用户问题以本文件为准。每题格式：**结论** → **要
 
 **结论：新目录副本 + 新 session。**
 
-推荐：Baseline 母版 → 每次 `cp` 到 `runs/<模型>-<第几次>/` → 确认无 GT → **新开** Claude Code session → 发同一份 `instruction.md`。
+推荐：Baseline 母版 → 每次 `cp` 到 `runs/<模型>/` → 确认无 GT → **新开** Claude Code session → 发同一份 `instruction.md`。
 
 禁止：
 
@@ -300,40 +295,51 @@ Agent 回答用户问题以本文件为准。每题格式：**结论** → **要
 
 ### G1. 上传前预检做什么？
 
-**结论：结构与完整性预审，不是终审。**
+**结论：两段能力；默认结构预检 + 可选 call-level 合并检测。均不是集合比例检查，也不是终审。**
 
-- 检查：数据包与 `multi-sessions/` 是否平级、Opus ≥2、manifest 字段、meta/rubric 等。
-- 不覆盖：pass@4 实测、偏序、分差等（须自测）。
-- 用法：加载 `上传前预检/SKILL.md`，提供提交根目录。
+| 段 | 输入 | 作用 |
+| --- | --- | --- |
+| **§A 结构** | 提交根 / 数据包路径 | 文件是否齐全、`trajectories/` 每模型 1 条主 session、meta 等 |
+| **§B call-level** | **session 根目录 + Gateway 根目录 + Session ID** | 合并甲方 call-level、校验字段；可写 `agents/main_agent.json` |
+
+- 不覆盖：集合过题比例（须自核）；Docker Baseline/GT 实测；甲方终审。  
+- `PRECHECK_PASS` / call-level PASS ≠ 比例合格 ≠ 结算。  
+- 用法：加载 `上传前预检/SKILL.md`，按用户要做的段索取路径（§B **不要**只靠任务包路径）。
+
+### G1b. call-level 合并要交什么路径？
+
+**结论：三项即可，两边同名 Session ID。**
+
+1. session 根：`~/.claude/projects/<工作目录编码>/` → `<sid>.jsonl` + 可选同名文件夹  
+2. Gateway 根：`~/.claude_lproxy/projects` → `<sid>/*.json`  
+3. Session ID  
+
+详见 `上传前预检/SKILL.md` §B。
 
 ### G2. 文档应该先看哪个？
 
-**结论：以 `用户操作步骤.md` 为主；`甲方要求说明.md` 作信息补充。**
+**结论：以 `用户操作步骤.md` 为主；`甲方要求说明.md` 含门槛与文末甲方要求一览。**
 
 | 文档 | 角色 |
 | --- | --- |
-| `用户操作步骤.md` | 主线：配连接、出题、调难度、整理交卷 |
-| `甲方要求说明.md` | 补充：门槛、字段、Checklist |
+| `用户操作步骤.md` | 主线 |
+| `Gateway采集说明.md` | 本地网关与日志 |
+| `甲方要求说明.md` | 门槛、字段、Checklist、附录 Z |
 | `甲方数据包参考样例/` | 结构示意 + 模板 |
 | `qa_skill/` | 本答疑口径 |
-| `上传前预检/` | 结构预检 |
+| `上传前预检/` | 结构预检 + call-level 合并 |
 
 ### G3. 最终以谁为准？
 
-**结论：以实现网和甲方的后期审核为准。**
-
-预检通过、自评合格，均不能替代后期审核。
+**结论：以甲方实际审核为准。** 实现网侧仅为预审核。
 
 ### G4. 怎么报名参与？
 
-**结论：满足基本要求后，按模板微信发给「栗子」进群。**
+**结论：满足基本要求后，按模板微信发给「栗子」进群。** 详见 `参与方式.md`。
 
-- 对象：理工类程序员相关从业者（前后端、数据分析、测试、DevOps 等）。
-- 门槛：Claude Code 完成过 ≥2 个项目；有 Docker 与单元测试经验；已读 `用户操作步骤.md`，疑问经本 Skill 后仍有兴趣。
-- 材料：岗位业务类型、Claude Code 经验、Docker/单测经验、每天可参与时间、剩余问题 → 微信发给 **栗子**。
-- 正式开始后：开放 Gateway，手机号注册，领取 Opus / GLM / 千问配置（平台提供 API，不可自备模型）。
+### G5. 出题能否直接改 GitHub Issue？
 
-**文档**：`参与方式.md`；`README.md`「参与方式」。
+**结论：不可以。** 须私有仓库 / 私有题意；DeepSWE 等仅可参考难度，禁止照搬。
 
 ---
 
@@ -347,7 +353,7 @@ Agent 回答用户问题以本文件为准。每题格式：**结论** → **要
 
 - 一般从 Anthropic 官方渠道获取 Claude Code CLI（具体入口以官网 / 文档为准，版本可能更新）。
 - 安装后终端可用 `claude` 命令；首次使用通常需登录或配置 API。
-- **采集本题须用平台提供的 API 与三套指定模型**，见 [A1](#a1-是否可以使用自己的模型--自己的-api)。
+- **采集本题须经平台 Gateway，用你自己的账号调用三套指定模型**，并回传日志，见 [A1](#a1-平台会提供模型-api-吗可以用自己的账号吗)。
 
 （回答时 Agent 可 Web 搜索「Claude Code install」获取最新链接，并加免责句。）
 
@@ -355,14 +361,14 @@ Agent 回答用户问题以本文件为准。每题格式：**结论** → **要
 
 - 指 Claude Code 侧切换当前使用的模型或配置 profile 的方式（命令名、子命令以你安装的 Claude Code 版本为准）。
 - **采数前务必确认当前连的是目标模型**（千问 / GLM / Opus），见 [A2](#a2-采数前要确认什么)。
-- 本平台会提供连接地址与密钥；切换方式以**平台说明 + Claude Code 当前文档**为准，Agent 可检索补充。
+- 正式采数须走 **Gateway** + **你自己的账号**；切换方式以**平台 Gateway 说明 + 客户端当前文档**为准，Agent 可检索补充。
 
 （回答时 Agent 可结合用户环境说明，并加免责句。）
 
 ### I3. Claude Code / API 费用、订阅、额度？
 
-- 取决于 Anthropic / 所用套餐 / 平台代发额度，**不在本采集包文档范围内**。
-- 采集任务用**平台提供的 API**，费用与额度问平台运营或官方账单说明。
+- 取决于你所用账号 / 套餐 / 厂商账单，**平台不代你出模型 API 费用**。  
+- 本采集包**不规定**具体资费；账单与额度问各厂商或账号运营方。
 
 （回答时 Agent 可概括公开定价信息，须注明可能变动，并加免责句。）
 
@@ -378,17 +384,20 @@ Agent 回答用户问题以本文件为准。每题格式：**结论** → **要
 
 | 关键词 | 条目 | 类型 |
 | --- | --- | --- |
-| 自己的模型 / 本地模型 / 自备 API | A1 | A 业务 |
+| 自己的账号 / Gateway / 赛讯日志 / 是否提供 API | A1 | A 业务 |
+| Gateway 路径 / sessionId 目录 | A3 | A 业务 |
+| 绕过 Gateway / 直连 | A1 | A 业务 |
 | 通过 / test.sh / eval_pass | C1 | A 业务 |
 | 一条数据 / 一条样本 | B1 | A 业务 |
-| pass@4 / 60% / 难度 | B4, C2 | A 业务 |
-| multi-sessions / 只交包 | D1, D2, D3 | A 业务 |
+| 集合比例 / 60% / 难度 | B4, C2 | A 业务 |
+| trajectories / 每模型 1 条 | D1–D4 | A 业务 |
 | 不同题面 / instruction | E2 | A 业务 |
 | 一 session 多题 / 多任务一个 session | E4 | A 业务 |
-| 预检 / 审核 | C4, G1, G3 | A 业务 |
+| 预检 / 审核 | C4, G1, G1b, G3 | A 业务 |
+| call-level 三项路径 | G1b, B2, D5 | A 业务 |
 | 报名 / 参与 / 栗子 / 进群 | G4 | A 业务 |
 | 轮次 / turns / 20 / 100 | C2, F1 | A 业务 |
-| 多题 / 批次 / 50% | C3 | A 业务 |
+| 题量 / <3 道 / 分布 | C3 | A 业务 |
 | Baseline / GT / 偷看答案 | B3, E1 | A 业务 |
 | solve.sh | F2 | A 业务 |
 | agents / call-level | B2, D5 | A 业务 |
