@@ -26,8 +26,8 @@ python3 scripts/merge_call_level.py \
 
 ## 交卷结构（检查什么）
 
-- 甲方原格式数据包 + 每模型 **1** 条主 session
-- 可选 `call_level.jsonl`（不算第二条主会话）
+- 甲方原格式数据包 + 每模型 **`session/` + `cc-gateway-log/`**
+- 可选 `call_level.jsonl`
 - 不要交同题多 run 旁路目录
 
 ## 脚本

@@ -1,0 +1,25 @@
+{
+  "id": "call-001",
+  "sessionId": "a4d11c0c-9b8d-4c9f-9e33-525d187969b7",
+  "startedAt": "2026-06-17T10:00:00.000Z",
+  "model": "claude-opus-4-8",
+  "request": {
+    "method": "POST",
+    "path": "/v1/messages",
+    "headers": {},
+    "body": {
+      "model": "claude-opus-4-8",
+      "max_tokens": 256,
+      "stream": true,
+      "output_config": { "effort": "high" },
+      "system": [{ "type": "text", "text": "sample system (redacted)" }],
+      "tools": [],
+      "messages": [{ "role": "user", "content": "sample" }]
+    }
+  },
+  "response": {
+    "statusCode": 200,
+    "headers": {},
+    "body": { "note": "sample gateway capture; replace with real capture files from cc-gateway" }
+  }
+}

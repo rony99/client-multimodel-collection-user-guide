@@ -31,11 +31,11 @@ Gateway 专章：**[Gateway采集说明.md](./Gateway采集说明.md)**（启动
 - **对象**：理工类程序员相关从业者（前后端、数据分析、测试、DevOps 等）  
 - **门槛**：Claude Code 完成过 ≥2 个项目；有 Docker 与单元测试经验  
 - **报名**：微信发给 **栗子** 进群  
-- **开跑后**：本机启动 **cc-gateway**，用**自己的账号**经网关采 Opus / GLM / 千问；回传 **Gateway 日志**（`<root_dir>/<sessionId>/`）与会话 / 赛讯日志（详 [Gateway采集说明.md](./Gateway采集说明.md)）
+- **开跑后**：本机启动 **cc-gateway**，用**自己的账号**经网关采 Opus / GLM / 千问；交卷每模型同时交 **`session/` + `cc-gateway-log/`**（详 [Gateway采集说明.md](./Gateway采集说明.md)）
 
 ## 提交量与分布（摘要）
 
-- **不再要求**同题连跑多次（pass@4）；**每模型每题只交 1 条轨迹**。  
+- **不再要求**同题连跑多次（pass@4）；**每模型每题 1 份轨迹**：`session/` + `cc-gateway-log/`。  
 - **要求每人至少交 ≥ 3 道题**，并在交题集合上满足模型过题比例：禁三模型全过；**Opus 过题率 ≤60%**；**Opus−千问 >20%**；**GLM ≥1 道过**。少于 3 道也可交，**是否采纳看当期整体分布**。  
 - **所交每道题均须千问测不过**（千问过题率 = 0，便于拉开与 Opus 的差距）。  
 - **平台不提供模型 API**；用自己的 Key / 订阅经本机 Gateway。  
@@ -50,13 +50,13 @@ A：**不会。** 使用本地 **Gateway（cc-gateway）**；你用自己的 Key
 A：正式采集须走 Gateway，否则没有 Session 目录抓包。不要用未接入 Gateway 的直连冒充正式轨迹。
 
 **Q：Gateway 日志在哪？和 Session 什么关系？**  
-A：默认 `~/.claude_lproxy/projects/<sessionId>/*.json`。**文件夹名 = Session ID**（与 JSON 内 `sessionId` 一致）。详见 Gateway 说明第 7 节。
+A：本机默认 `~/.claude_lproxy/projects/<sessionId>/*.json`，**文件夹名 = Session ID**。交卷时整夹拷入 `trajectories/<模型>/cc-gateway-log/`，与 `session/` 内会话同一 ID。详见 Gateway 说明第 7–8 节。
 
 **Q：怎么才算「通过」？**  
 A：单题单次看 Docker 里 `tests/test.sh` 退出码是否为 `0`。个人提交还要看**整体过/不过比例**；最终以甲方审核为准。
 
 **Q：「一条数据」是某一个模型跑一次吗？**  
-A：不是。一条 = **一道完整题**（数据包 + 三模型各 1 条 session）+ Gateway / 约定日志。
+A：不是。一条 = **一道完整题**（数据包 + 三模型各 1 份 `session/` + `cc-gateway-log/`）+ 约定其它日志。
 
 **Q：还要不要同题跑 4 次（pass@4）？**  
 A：**众包日常不要求。** 每模型每题 1 条轨迹即可；看你交的多道题上的整体比例。

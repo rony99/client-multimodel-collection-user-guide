@@ -1,0 +1,25 @@
+{
+  "id": "call-001",
+  "sessionId": "26806b32-4b84-48be-be12-403d9f5c94c3",
+  "startedAt": "2026-06-17T10:00:00.000Z",
+  "model": "qwen-3.7-max",
+  "request": {
+    "method": "POST",
+    "path": "/v1/messages",
+    "headers": {},
+    "body": {
+      "model": "qwen-3.7-max",
+      "max_tokens": 256,
+      "stream": true,
+      "output_config": { "effort": "high" },
+      "system": [{ "type": "text", "text": "sample system (redacted)" }],
+      "tools": [],
+      "messages": [{ "role": "user", "content": "sample" }]
+    }
+  },
+  "response": {
+    "statusCode": 200,
+    "headers": {},
+    "body": { "note": "sample gateway capture; replace with real capture files from cc-gateway" }
+  }
+}

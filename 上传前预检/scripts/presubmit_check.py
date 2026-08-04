@@ -2,7 +2,9 @@
 """上传前结构预检（众包用户包）。不验证集合过题比例。
 
 交卷根目录（或直接指向）甲方原格式数据包：
-  <task_id>/  — instruction / tests / trajectories（每模型 1 条）等
+  <task_id>/trajectories/<模型>/
+    session/           — Claude Code 主会话 .jsonl（及有则 subagents/）
+    cc-gateway-log/    — 该次 Session 的 cc-gateway 抓包 *.json
 不再要求平级 multi-sessions/ 或同题 pass@4。
 """
 
@@ -32,6 +34,7 @@ DISCLAIMER = (
     "**不查集合过题比例**，**不代表结算或最终合格**。"
     "请自行核验：题量要求≥3；**每题千问均挂**；禁三模型全过、Opus≤60%、Opus−千问>20%、GLM≥1 道过等；"
     "平台不代提供模型 API；"
+    "每模型轨迹须含 session/ + cc-gateway-log/；"
     "**最终以甲方实际审核为准**。"
 )
 
@@ -354,23 +357,38 @@ def check_workspace_clean(package: Path, report: Report) -> None:
 # Generated call-level / derived JSONL are not “主会话”
 _AUX_TRAJ_JSONL = frozenset({"call_level.jsonl", "calls.jsonl"})
 
+SESSION_DIR_NAME = "session"
+GATEWAY_LOG_DIR_NAME = "cc-gateway-log"
 
-def _find_sessions(model_dir: Path) -> list[Path]:
-    """Top-level main Claude session .jsonl only (exclude call_level)."""
+
+def _find_sessions_in_dir(search_dir: Path) -> list[Path]:
+    """Main Claude session .jsonl under a directory (exclude call_level)."""
     found: list[Path] = []
-    if not model_dir.is_dir():
+    if not search_dir.is_dir():
         return found
-    for p in sorted(model_dir.glob("*.jsonl")):
+    for p in sorted(search_dir.glob("*.jsonl")):
         if p.name in _AUX_TRAJ_JSONL:
             continue
         found.append(p)
-    # prefer session.jsonl
     found.sort(key=lambda p: (0 if p.name == "session.jsonl" else 1, p.name))
     return found
 
 
+def _find_sessions(model_dir: Path) -> tuple[list[Path], Path | None, bool]:
+    """Return (sessions, session_root_used, used_session_subdir).
+
+    Preferred layout: trajectories/<model>/session/*.jsonl
+    Legacy (warn path): trajectories/<model>/*.jsonl at model root.
+    """
+    preferred = model_dir / SESSION_DIR_NAME
+    if preferred.is_dir():
+        return _find_sessions_in_dir(preferred), preferred, True
+    legacy = _find_sessions_in_dir(model_dir)
+    return legacy, (model_dir if legacy else None), False
+
+
 def check_model_sessions(sessions_root: Path, report: Report) -> None:
-    """检查 trajectories/（或兼容传入的 sessions 根）下每模型 1 条轨迹。"""
+    """检查 trajectories/ 下每模型：session/ + cc-gateway-log/ 各一份正式轨迹。"""
     if not sessions_root.is_dir():
         report.add("FAIL", "TRAJ_ROOT", f"缺失轨迹目录：{sessions_root}")
         return
@@ -392,24 +410,76 @@ def check_model_sessions(sessions_root: Path, report: Report) -> None:
             )
             continue
         report.add("PASS", f"TRAJ_{model}", f"存在模型目录 {sessions_root.name}/{hit.name}")
-        sessions = _find_sessions(hit)
+
+        session_dir = hit / SESSION_DIR_NAME
+        gw_dir = hit / GATEWAY_LOG_DIR_NAME
+        if not session_dir.is_dir():
+            report.add(
+                "FAIL",
+                f"SESSION_DIR_{model}",
+                f"{hit.name}/ 缺少 {SESSION_DIR_NAME}/（须放 Claude Code 主会话 .jsonl）",
+            )
+        else:
+            report.add(
+                "PASS",
+                f"SESSION_DIR_{model}",
+                f"存在 {hit.name}/{SESSION_DIR_NAME}/",
+            )
+        if not gw_dir.is_dir():
+            report.add(
+                "FAIL",
+                f"GW_DIR_{model}",
+                f"{hit.name}/ 缺少 {GATEWAY_LOG_DIR_NAME}/（须放本场 cc-gateway 抓包 *.json）",
+            )
+        else:
+            gw_files = list(gw_dir.glob("*.json")) + list(gw_dir.rglob("*.json"))
+            # de-dup if both top and nested
+            gw_files = sorted({p.resolve() for p in gw_files}, key=lambda p: str(p))
+            if not gw_files:
+                report.add(
+                    "FAIL",
+                    f"GW_EMPTY_{model}",
+                    f"{hit.name}/{GATEWAY_LOG_DIR_NAME}/ 下未找到 *.json 抓包",
+                )
+            else:
+                report.add(
+                    "PASS",
+                    f"GW_DIR_{model}",
+                    f"{hit.name}/{GATEWAY_LOG_DIR_NAME}/ 含 {len(gw_files)} 个 json 抓包",
+                )
+
+        sessions, sroot, used_subdir = _find_sessions(hit)
+        if not used_subdir and sessions:
+            report.add(
+                "WARN",
+                f"SESSION_LAYOUT_{model}",
+                f"{hit.name}/ 主会话仍在模型根目录；请改放到 {SESSION_DIR_NAME}/session.jsonl",
+            )
         if not sessions:
-            report.add("FAIL", f"SESSION_{model}", f"{hit.name}/ 下未找到主 session .jsonl")
+            report.add(
+                "FAIL",
+                f"SESSION_{model}",
+                f"{hit.name}/{SESSION_DIR_NAME}/ 下未找到主 session .jsonl",
+            )
             continue
         if len(sessions) == 1:
             report.add(
                 "PASS",
                 f"SESSION_COUNT_{model}",
-                f"{hit.name}/ 含 1 条主轨迹（符合每模型只交 1 条）",
+                f"{hit.name}/{SESSION_DIR_NAME}/ 含 1 条主轨迹（符合每模型只交 1 条）",
             )
         else:
             report.add(
                 "FAIL",
                 f"SESSION_COUNT_{model}",
-                f"{hit.name}/ 含 {len(sessions)} 条顶层 .jsonl；正式须仅 1 条主会话（subagent 请放 subagents/）",
+                f"{hit.name}/{SESSION_DIR_NAME}/ 含 {len(sessions)} 条顶层 .jsonl；"
+                f"正式须仅 1 条主会话（subagent 请放 {SESSION_DIR_NAME}/subagents/）",
             )
         main = sessions[0]
-        report.add("PASS", f"SESSION_{model}", f"主 session：{sessions_root.name}/{hit.name}/{main.name}")
+        rel_main = f"{sessions_root.name}/{hit.name}/{SESSION_DIR_NAME if used_subdir else ''}/{main.name}".replace(
+            "//", "/"
+        )
+        report.add("PASS", f"SESSION_{model}", f"主 session：{rel_main}")
         try:
             lines = main.read_text(encoding="utf-8", errors="replace").splitlines()
         except OSError as e:
@@ -436,15 +506,16 @@ def check_model_sessions(sessions_root: Path, report: Report) -> None:
                 f"{hit.name} 未能从 jsonl 粗估轮次，请人工确认平均 assistant 执行轮次 ≥20",
             )
         call_level = hit / "call_level.jsonl"
+        if not call_level.is_file() and sroot is not None:
+            call_level = sroot / "call_level.jsonl"
         if call_level.is_file():
             report.add(
                 "PASS",
                 f"CALL_LEVEL_{model}",
-                f"{hit.name}/call_level.jsonl 存在（session+Gateway 合并产物；本预检不验字段细节）",
+                f"{hit.name} 存在 call_level.jsonl（可选合并产物；本预检不验字段细节）",
             )
-        sub_a = hit / "subagents"
-        sub_b = list(hit.glob("*/subagents"))
-        if sub_a.is_dir() or sub_b:
+        sub_a = (sroot or hit) / "subagents"
+        if sub_a.is_dir():
             report.add("PASS", f"SUBAGENT_{model}", f"{hit.name} 含 subagent 目录")
         # 无 subagent 不打 WARN（多数跑次无委派）
 
@@ -505,7 +576,7 @@ def check_one_package(package: Path, root: Path, report: Report) -> None:
             report.sessions_dir = str(traj)
         check_model_sessions(traj, report)
     else:
-        report.add("FAIL", "TRAJ_ROOT", f"{package.name}/ 缺失 trajectories/（每模型正式轨迹各 1 条）")
+        report.add("FAIL", "TRAJ_ROOT", f"{package.name}/ 缺失 trajectories/（每模型须含 session/ + cc-gateway-log/）")
     check_no_agents_required(package, report)
 
 
@@ -542,7 +613,7 @@ def run_check(root: Path) -> Report:
         report.add(
             "WARN",
             "LAYOUT_SESSIONS",
-            f"检测到旁路 {sess.name}/：正式勿交；每题每模型只交 trajectories/ 下 1 条主会话",
+            f"检测到旁路 {sess.name}/：正式勿交；每模型轨迹放 trajectories/<模型>/session/ 与 cc-gateway-log/",
         )
 
     scan_root = root if not _looks_like_package(root) else root.parent
@@ -577,7 +648,7 @@ def format_markdown(report: Report) -> str:
             "",
             "- 集合：题量≥3；**每题千问均挂**；禁三模型全过；Opus 过题率 ≤ 60%；Opus−千问 > 20%；GLM ≥ 1 道过",
             "- 平均 assistant 执行轮次 ≥ 20；私有题意（禁止直接改造公开 GitHub Issue）",
-            "- 每模型每题 1 条轨迹；平台不代提供模型 API（用户自备经 Gateway）",
+            "- 每模型轨迹：session/ + cc-gateway-log/；平台不代提供模型 API（用户自备经 Gateway）",
             "- Docker 内 Baseline FAIL / GT PASS 的完整复现（本脚本默认不做 Docker 构建）",
             "- Rubric 人工/LLM 打分是否与测试结论一致",
             "",
@@ -588,7 +659,7 @@ def format_markdown(report: Report) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="众包任务包上传前结构预检（甲方数据包 + trajectories/ 每模型 1 条）"
+        description="众包任务包上传前结构预检（trajectories 须含 session/ + cc-gateway-log/）"
     )
     parser.add_argument(
         "--task-dir",

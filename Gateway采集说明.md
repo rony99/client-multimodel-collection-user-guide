@@ -17,15 +17,15 @@ Claude Code  ──HTTP──►  本机 cc-gateway (:3001)  ──►  上游�
                          （Gateway 抓包日志）
 ```
 
-同时请保留 Claude Code 自己的 **会话轨迹**（主会话 `.jsonl`，交卷进 `trajectories/`；若群里还要求「赛讯日志」，按其定义一并交）。
+同时请将 Claude Code **会话** 与 **Gateway 抓包** 按题整理进数据包（见下表与操作步骤第 8 步）。若群里还要求「赛讯日志」，按其定义一并交。
 
-| 日志类型 | 是什么 | 典型位置 |
+| 日志类型 | 是什么 | 交卷位置 |
 | --- | --- | --- |
-| **Gateway 日志** | 每次模型 API 调用的请求/响应抓包 | 见下文「抓包目录」 |
-| **Claude Code session** | 做题对话主会话（及 subagent） | 本机 `~/.claude/projects/...`；交卷拷到 `trajectories/<模型>/` |
-| **赛讯日志** | 若平台另有定义，以群内 / 平台说明为准 | 按说明打包发送 |
+| **Claude Code session** | 做题主会话（及 subagent） | `trajectories/<模型>/session/` |
+| **Gateway 日志** | 每次模型 API 调用的请求/响应抓包 | 本机源：下节「抓包目录」→ 交卷：`trajectories/<模型>/cc-gateway-log/` |
+| **赛讯日志** | 若平台另有定义，以群内说明为准 | 按说明打包 |
 
-<span style="color:#d93025">正式跑题时必须先启动 Gateway，并用其生成的 settings 启动 Claude Code；否则没有 Gateway 日志，正式轨迹不齐。</span>
+<span style="color:#d93025">正式跑题时必须先启动 Gateway，并用其生成的 settings 启动 Claude Code；交卷时每个模型必须同时有 `session/` 与 `cc-gateway-log/`。</span>
 
 ---
 
@@ -203,7 +203,9 @@ Session ID 优先取 Claude Code 请求头 **`x-claude-code-session-id`**（一�
 3. 打开其中任一 `*.json`：  
    - `"sessionId"` **等于**父文件夹名  
    - 有 `request` / `response`（流式时 `response.bodyText` 可能是合并后的 assistant 文本）  
-4. 对照本机 Claude Code 主会话：session 文件 id 应与该 `<sessionId>` **一致**（正式整理时轨迹放 `trajectories/<模型>/`，Gateway 目录整夹保留备交）。  
+4. 对照本机 Claude Code 主会话：session 文件 id 应与该 `<sessionId>` **一致**。正式整理时：  
+   - session → `trajectories/<模型>/session/`  
+   - 抓包整夹 → `trajectories/<模型>/cc-gateway-log/`  
 5. 鉴权头在抓包中为哈希，**不应**出现明文 API Key。  
 6. （可选）用 [上传前预检 §B](./上传前预检/SKILL.md) 指定 session 根 + Gateway 根 + 该 Session ID，确认 **甲方 call-level 字段检测 PASS**（无 tools 的探针 call 会被跳过；须有真实主对话 + Gateway 落盘）。
 
@@ -215,14 +217,27 @@ Session ID 优先取 Claude Code 请求头 **`x-claude-code-session-id`**（一�
 
 ## 8. 交卷时怎么交日志
 
-| 交什么 | 建议 |
-| --- | --- |
-| 甲方数据包 + `trajectories/<模型>/` session | 见 [用户操作步骤.md](./用户操作步骤.md) 第 8 步 |
-| **Gateway 日志** | 该题各模型对应的 `<root_dir>/<sessionId>/` 整目录（至少正式三条 session 的三个文件夹）；按群内要求打包 zip 上传 / 发送 |
-| **赛讯日志** | 以平台 / 群内定义为准；若未另行定义，以「Claude Code 主会话 jsonl 已放 trajectories」为准，并确认 Gateway 目录齐 |
-| call-level（可选） | [上传前预检 §B](./上传前预检/SKILL.md)：session 根 + Gateway 根 + Session ID → 校验后的 `call_level.jsonl` |
+**轨迹写进数据包内部**，不再题包外单独「另交一份」：
 
-<span style="color:#d93025">只交题目、不交 Gateway 日志 = 正式链路不齐。</span>
+| 交什么 | 位置 |
+| --- | --- |
+| Claude Code session | `trajectories/<模型>/session/`（主会话 1 条；有则 subagents） |
+| **cc-gateway 抓包** | `trajectories/<模型>/cc-gateway-log/`（从本机 `<root_dir>/<sessionId>/` 整夹内容拷入） |
+| 赛讯日志（若要求） | 以群内定义为准 |
+| call-level（可选） | [上传前预检 §B](./上传前预检/SKILL.md) 合并产物，可放在模型目录 |
+
+```bash
+# 示例：整理某模型正式轨迹（sessionId 与 session 内字段一致）
+MODEL=qwen-3.7-max
+SID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+TASK=./my-task-package
+mkdir -p "$TASK/trajectories/$MODEL/session" "$TASK/trajectories/$MODEL/cc-gateway-log"
+cp ~/.claude/projects/<encoded_cwd>/"$SID".jsonl "$TASK/trajectories/$MODEL/session/session.jsonl"
+# 有 subagent 时：cp -R 对应 subagents 目录到 session/subagents/
+cp -R ~/.claude_lproxy/projects/"$SID"/* "$TASK/trajectories/$MODEL/cc-gateway-log/"
+```
+
+<span style="color:#d93025">只交题目、或只有 session 没有 `cc-gateway-log/` = 正式轨迹不齐。</span>
 
 ---
 

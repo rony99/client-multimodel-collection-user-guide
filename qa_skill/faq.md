@@ -15,8 +15,8 @@ Agent 回答用户问题以本文件为准。每题格式：**结论** → **要
 - 正式对比模型仍为三套：`claude-opus-4.8` / `glm-5.2` / `qwen-3.7-max`  
 - 配置 `providers.yaml` 的 `active`：`A` GLM / `B` 千问 / `C` 官方 Opus 订阅  
 - **须先启动 Gateway**，再用 `claude --settings …/providers.claude.settings.json`  
-- Gateway 日志：`<root_dir>/<sessionId>/*.json`，**文件夹名 = Session ID**  
-- 交卷：数据包 + trajectories + Gateway 日志目录（+ 约定赛讯 / 会话说明）
+- Gateway 日志：本机 `<root_dir>/<sessionId>/*.json` → 交卷 `trajectories/<模型>/cc-gateway-log/`  
+- 交卷：数据包 + 每模型 **`session/` + `cc-gateway-log/`**
 
 **文档**：`Gateway采集说明.md`（完整教程）；`用户操作步骤.md` 第 1 步；`参与方式.md`。
 
@@ -36,7 +36,7 @@ Agent 回答用户问题以本文件为准。每题格式：**结论** → **要
 
 - Claude Code 通常通过请求头 `x-claude-code-session-id` 带 UUID，网关用它做目录名。  
 - 一会话多文件正常；整目录保留。  
-- 与交卷的 `trajectories/<模型>/session.jsonl` 的 session 应对齐同一 ID。
+- 与包内 `trajectories/<模型>/session/` 的 session **同一 ID**。
 
 **文档**：`Gateway采集说明.md` §7–§8。
 
@@ -51,7 +51,8 @@ Agent 回答用户问题以本文件为准。每题格式：**结论** → **要
 | 内容 | 说明 |
 | --- | --- |
 | 甲方数据包 `<task_id>/` | 题面、环境、测试、GT、rubric、meta、`trajectories/` 等 |
-| `trajectories/<模型>/` | **每个模型正式只交 1 条** session |
+| `trajectories/<模型>/session/` | Claude Code 主会话 1 条（有则 subagents） |
+| `trajectories/<模型>/cc-gateway-log/` | 该 Session 的 cc-gateway 抓包 |
 
 细分：
 
@@ -65,7 +66,8 @@ Agent 回答用户问题以本文件为准。每题格式：**结论** → **要
 
 **结论：Claude Code 主会话 `.jsonl`（及有则 subagent `.jsonl`）。**
 
-- 放在 `trajectories/<模型>/`。
+- 放在 `trajectories/<模型>/session/`。
+- Gateway 抓包放在同模型 `cc-gateway-log/`。
 - 需要甲方 call-level 时：预检合并脚本用 **session 根目录 + Gateway 根目录 + Session ID** 自动找 `<sid>.jsonl`、同名文件夹（subagent）与 Gateway 下 `<sid>/*.json`（见 [上传前预检/SKILL.md](../上传前预检/SKILL.md) §B）。
 - **禁止**编造 system/tools；request 取 Gateway，response 必要时用 session 补。
 - 用户侧**不要求**手工写 call-level；合并可写 `agents/main_agent.json`。
@@ -103,7 +105,8 @@ Agent 回答用户问题以本文件为准。每题格式：**结论** → **要
   <session_id>/subagents/*.jsonl
 ```
 
-- 找最新 `.jsonl`，拷到 `<task_id>/trajectories/<模型>/`。
+- 找最新 `.jsonl`，拷到 `<task_id>/trajectories/<模型>/session/`。  
+- 对应 Gateway 目录拷到 `trajectories/<模型>/cc-gateway-log/`。
 
 **说明：以上为非业务类型问题，由 Agent 根据通用信息辅助回复，不代表本平台采集规范或最终审核口径。**
 
@@ -127,7 +130,7 @@ Agent 回答用户问题以本文件为准。每题格式：**结论** → **要
 
 | 类型 | 要求 |
 | --- | --- |
-| 单题 | 三模型各 1 条 session；turns 平均 ≥20；Baseline 挂 / GT 过；同一 instruction |
+| 单题 | 三模型各 `session/`+`cc-gateway-log/`；turns 平均 ≥20；Baseline 挂 / GT 过；同一 instruction |
 | 集合 | <span style="color:#d93025">禁「三模型都测通」</span> |
 | 集合 | <span style="color:#d93025">所交**每道题千问均须测不过**</span>（过题率 = 0） |
 | 集合 | <span style="color:#d93025">Opus 过题率 ≤ 60%</span> |
@@ -166,16 +169,21 @@ Agent 回答用户问题以本文件为准。每题格式：**结论** → **要
 
 ### D1. 最终要交什么？
 
-**结论：一道题一个甲方原格式数据包；每模型 1 条轨迹；并按说明回传 Gateway 日志 + 赛讯日志。**
+**结论：一道题一个甲方原格式数据包；每模型同时交 `session/` + `cc-gateway-log/`。**
 
 ```text
 <submit_root>/
   <task_id>/
-    ...
     trajectories/
-      claude-opus-4-8/session.jsonl
-      glm-5.2/session.jsonl
-      qwen-3.7-max/session.jsonl
+      claude-opus-4-8/
+        session/session.jsonl
+        cc-gateway-log/*.json
+      glm-5.2/
+        session/session.jsonl
+        cc-gateway-log/*.json
+      qwen-3.7-max/
+        session/session.jsonl
+        cc-gateway-log/*.json
 ```
 
 - 目录名仅允许字母、数字、`._-`。
@@ -188,22 +196,23 @@ Agent 回答用户问题以本文件为准。每题格式：**结论** → **要
 **结论：不要交。**
 
 - 样例包已**不再包含** `multi-sessions/`。
-- 正式只交包内 `trajectories/<模型>/` 下 **1** 条主会话（有则另加 `subagents/`）。
+- 正式只交包内 `session/` + `cc-gateway-log/`。
 
 ### D3. 每个模型交几次 session？
 
-**结论：正式交卷每模型每题恰好 1 次。**
+**结论：正式交卷每模型每题恰好 1 条主会话（在 `session/`）。**
 
-- 试难度时可多跑，但交卷目录里只保留 1 条顶层 `.jsonl`。
+- 试难度时可多跑，但交卷只保留 1 条主 `.jsonl`。
 - 不要为 pass@4 刻意交多条；多条会被上传前预检判 FAIL。
+- **必须同时**有非空 `cc-gateway-log/`。
 
 ### D4. 包内 `trajectories/` 放什么？
 
-**结论：该题三模型正式提交的 Claude Code 主会话（各 1 条顶层 `.jsonl`）。**
+**结论：三模型各：`session/`（Claude Code）+ `cc-gateway-log/`（cc-gateway 抓包）。**
 
 ### D5. 用户需要交 `agents/` 吗？
 
-**结论：不强制手写。** 可用上传前预检的合并脚本从 Gateway 生成 `agents/main_agent.json`；交主会话 + Gateway 日志即可让 Agent 代跑合并。
+**结论：不强制手写。** 可用合并脚本生成；已交两目录即可让 Agent 代跑。
 
 ---
 
@@ -299,7 +308,7 @@ Agent 回答用户问题以本文件为准。每题格式：**结论** → **要
 
 | 段 | 输入 | 作用 |
 | --- | --- | --- |
-| **§A 结构** | 提交根 / 数据包路径 | 文件是否齐全、`trajectories/` 每模型 1 条主 session、meta 等 |
+| **§A 结构** | 提交根 / 数据包路径 | 文件是否齐全、`trajectories/` 每模型 `session/`+`cc-gateway-log/`、meta 等 |
 | **§B call-level** | **session 根目录 + Gateway 根目录 + Session ID** | 合并甲方 call-level、校验字段；可写 `agents/main_agent.json` |
 
 - 不覆盖：集合过题比例（须自核）；Docker Baseline/GT 实测；甲方终审。  

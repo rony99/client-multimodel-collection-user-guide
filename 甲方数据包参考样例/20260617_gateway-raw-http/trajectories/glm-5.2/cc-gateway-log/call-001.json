@@ -1,0 +1,25 @@
+{
+  "id": "call-001",
+  "sessionId": "20687f9d-402b-468b-9735-12f0c6575aaa",
+  "startedAt": "2026-06-17T10:00:00.000Z",
+  "model": "glm-5.2",
+  "request": {
+    "method": "POST",
+    "path": "/v1/messages",
+    "headers": {},
+    "body": {
+      "model": "glm-5.2",
+      "max_tokens": 256,
+      "stream": true,
+      "output_config": { "effort": "high" },
+      "system": [{ "type": "text", "text": "sample system (redacted)" }],
+      "tools": [],
+      "messages": [{ "role": "user", "content": "sample" }]
+    }
+  },
+  "response": {
+    "statusCode": 200,
+    "headers": {},
+    "body": { "note": "sample gateway capture; replace with real capture files from cc-gateway" }
+  }
+}

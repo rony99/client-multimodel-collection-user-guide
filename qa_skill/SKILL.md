@@ -52,13 +52,13 @@ description: >-
 | 平台 API | **不提供**；用户自备账号经 Gateway |
 | 终审通过 | **以甲方实际审核为准** |
 
-**不再要求**同题 pass@4 / 多 run 旁路包；每模型每题只交 **1** 条主轨迹。  
+**不再要求**同题 pass@4 / 多 run 旁路包；每模型每题 **`session/` + `cc-gateway-log/`**。  
 **出题**：**每道交题须千问测不过**；用自己的 API/订阅，平台不发 Key。
 
 ## 回答风格
 
 - 简短、可执行；业务问题优先对照 faq 条目编号。
-- 需要目录示意时，引用 `<task_id>/trajectories/<模型>/`（每模型 1 条）。
+- 需要目录示意时，引用 `<task_id>/trajectories/<模型>/session/` 与 `…/cc-gateway-log/`。
 - 样例路径：[../甲方数据包参考样例/20260617_gateway-raw-http/](../甲方数据包参考样例/20260617_gateway-raw-http/)
 
 ## 权威口径优先级（仅 A 类业务问题）

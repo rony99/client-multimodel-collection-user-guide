@@ -2,7 +2,7 @@
 name: client-harbor-presubmit
 description: >-
   上传前结构预检众包 Harbor 任务包：检查甲方原格式数据包与 trajectories/
-  （每模型 1 条 session），可选将 session-root+Gateway-root+SessionID 合并为甲方 call-level。
+  （每模型 session/ + cc-gateway-log/），可选将 session-root+Gateway-root+SessionID 合并为甲方 call-level。
   不查集合过题比例。用户提供路径后由 Agent 执行；结构绿 ≠ 甲方终审。
 ---
 
@@ -62,15 +62,22 @@ gateway_root/
   <task_a>/
     trajectories/
       claude-opus-4-8/
-        session.jsonl          # 主会话（可从原生 <sid>.jsonl 拷入）
+        session/
+          session.jsonl        # 主会话（可从原生 <sid>.jsonl 拷入）
+          subagents/           # 有则交齐
+        cc-gateway-log/        # 本场 cc-gateway 抓包
+          *.json
         call_level.jsonl       # 可选：合并产物
-        subagents/             # 有则交齐 / 合并也可写出 sub call_level
       glm-5.2/
+        session/
+        cc-gateway-log/
       qwen-3.7-max/
+        session/
+        cc-gateway-log/
     agents/                    # 可选：合并写出 main_agent.json
 ```
 
-<span style="color:#d93025">不要交同题多 run 旁路目录</span>；正式只认每模型 **1 条**主会话（`call_level.jsonl` 不计入第二条主 session）。
+<span style="color:#d93025">不要交同题多 run 旁路目录</span>。每模型必须同时有 **`session/`**（1 条主会话）与 **`cc-gateway-log/`**（≥1 个 `*.json`）。`call_level.jsonl` 可选。
 
 示意：[../甲方数据包参考样例/](../甲方数据包参考样例/)
 
@@ -157,7 +164,7 @@ python3 上传前预检/scripts/validate_call_level.py \
 
 1. 全部甲方原格式数据包布局  
 2. instruction / workspace / Dockerfile / test.sh / rubrics / meta / GT  
-3. `trajectories/` 三模型、每模型 1 条主 `.jsonl`（`call_level` 白名单）  
+3. `trajectories/` 三模型；每模型 **`session/*.jsonl` + `cc-gateway-log/*.json`**  
 4. 可选 `call_level.jsonl` 存在性（字段用 `validate_call_level.py`）  
 5. `agents/` 不强制手写  
 6. 旁路 multi-sessions → WARN  
