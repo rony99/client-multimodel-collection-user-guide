@@ -2,14 +2,19 @@
 name: client-harbor-presubmit
 description: >-
   上传前预检众包任务包。用户只需提供一个「甲方数据包」目录路径。
-  有路径后：§A 结构 + §B 包内 session/cc-gateway-log 合并校验。
-  用户未给路径时必须先询问，禁止猜测本机 projects 或自行扩路径。
-  不查集合过题比例；结构/合并绿 ≠ 终审。
+  有路径后：§A 结构；§B 在包内定位 session/ 与 cc-gateway-log/、合并到临时目录（不写回数据包）、
+  再对合并后的 call-level 做甲方日志字段校验（含 thinking+signature）。
+  未给路径时必须先询问。不查集合过题比例；绿 ≠ 终审。
 ---
 
 # 上传前预检（众包自包含包）
 
-对用户**已整理好的甲方数据包**做 §A 结构 + §B 包内 call-level 合并校验。
+对用户**已整理好的甲方数据包**做两段检查：
+
+1. **§A 结构**：文件是否按甲方包布局放齐  
+2. **§B 合并 + 甲方日志字段**：用包内 **session + Gateway log** 生成 call-level，校验是否满足甲方 trace 规格  
+
+用户交卷材料只有 **Claude Code session** 与 **本 Gateway 抓包**；**甲方 call-level 形态必须合并后才能得到**。正式预检**不得**把合并产物写进用户数据包。
 
 ---
 
@@ -17,96 +22,100 @@ description: >-
 
 ### 用户只需提供一件事
 
-**唯一必要输入：数据包目录路径**（绝对路径优先），例如：
-
-- `/Users/me/submit/20260617_gateway-raw-http`
-- 或用户工作区中指向该目录的路径
+**唯一必要输入：数据包目录路径**（绝对路径优先）。
 
 | 检查 | 是否另要路径 |
 | --- | --- |
-| §A 结构 | 否，用该路径 `--task-dir` |
-| §B 合并校验 | 否，用**同一路径** `--package` |
-| 本机 `~/.claude` / `~/.claude_lproxy` | **不要索要**（正式流程不用） |
-| Session ID 列表 | **不要索要**（从包内 session 自读） |
+| §A 结构 | 否，`--task-dir PACK` |
+| §B 合并校验 | 否，同一 `PACK` 的 `--package` |
+| 本机 `~/.claude` / `~/.claude_lproxy` | **不要索要** |
+| Session ID | **不要索要**（从包内 session 自读） |
 
 ### 若用户未提供数据包路径
 
-1. **立刻停住**，不要跑预检脚本、不要猜路径、不要去扫 `~/.claude`。  
-2. **先用一句话向用户要路径**，例如：
-
-> 请提供已整理好的**甲方数据包目录**的完整路径（需含 `instruction.md`、`tests/`、`trajectories/` 等）。  
-> 示例：`/path/to/your-task-id`。拿到路径后我会做结构预检和包内日志合并校验。
-
-3. 用户给出有效路径后，再执行下文 §A → §B。  
-4. 路径无效（不存在 / 不是目录）→ 说明问题并**再要一次**。
+立刻停住，先要路径，再执行。禁止猜路径。
 
 ### 禁止
 
-- 在未拿到用户路径时声称「已完成预检」  
-- 默认改用本机原始 session 根 / Gateway 根  
-- 向用户索要 Session ID、session-root、gateway-root（正式流程）
+- 未给路径声称预检完成  
+- 正式流程把 `call_level.jsonl` / `agents/` **写回用户数据包**（污染包）  
+- 要求用户事先手写 call-level  
+- 索要本机 session-root / gateway-root（调试除外）
 
 ---
 
 ## 开场可告知用户（拿到路径之后）
 
-> 我将用您提供的**这一个数据包路径**做：  
-> 1）结构是否齐全；2）包内 `session/` + `cc-gateway-log/` 合并 call-level。  
-> 不到您机器上的 Claude/Gateway 原始目录另找文件。  
-> 不查集合过题比例；**绿 ≠ 结算；最终以甲方审核为准。**
+> 将用这一路径：  
+> 1）检查包结构；2）在包内找各模型 `session/` 与 `cc-gateway-log/` 合并成 call-level（产物在临时目录，**不改您的包**），再判断合并结果是否达到甲方日志字段要求。  
+> **绿 ≠ 结算；最终以甲方审核为准。**
 
 ---
 
-## 标准流程（路径已具备时）
+## 标准流程
 
 ```text
-用户给出 PACK = 数据包目录
+PACK = 用户数据包目录
     → §A：presubmit_check.py --task-dir PACK
     → §B：merge_call_level.py --package PACK --check
-    → 汇报两段结果
+         · 只读 trajectories/<模型>/session/ 与 cc-gateway-log/
+         · 合并到系统临时目录（scratch）
+         · 校验合并后 JSONL 的甲方字段（含 thinking + 非空 signature）
+    → 汇报两段结果；说明临时目录路径（可选调试）
 ```
 
-默认**两段都跑**（用户明确只要「看文件齐不齐」时可只跑 §A）。
-
-### §A 结构预检
+### §A 结构
 
 ```bash
 python3 上传前预检/scripts/presubmit_check.py \
-  --task-dir <用户给的数据包绝对路径> \
+  --task-dir <PACK> \
   --markdown
 ```
 
-### §B 包内合并校验
+### §B 合并到临时文件 + 甲方字段校验
 
 ```bash
 python3 上传前预检/scripts/merge_call_level.py \
-  --package <同一数据包绝对路径> \
+  --package <PACK> \
   --check
 ```
 
-单模型（用户点名时）：
+单模型：
 
 ```bash
 python3 上传前预检/scripts/merge_call_level.py \
-  --package <同一数据包绝对路径> \
+  --package <PACK> \
   --model claude-opus-4-8 \
   --check
 ```
 
-脚本从包内读取：
+脚本行为（正式预检默认）：
 
 ```text
-trajectories/<模型>/
-  session/session.jsonl     # Session ID 从文件内容解析
-  session/subagents/        # 有则
-  cc-gateway-log/*.json
+读取（不得改写）：
+  trajectories/<模型>/session/…jsonl
+  trajectories/<模型>/cc-gateway-log/*.json
+
+写出（临时目录，例如 /tmp/cc-calllevel-merge-XXXX/）：
+  <模型>/call_level.jsonl
+
+然后：
+  对合并后的 records 做甲方 call-level 字段检测
 ```
 
-写出（§B）：`trajectories/<模型>/call_level.jsonl`。
+| 选项 | 含义 |
+| --- | --- |
+| 默认 | scratch `mkdtemp`，**不污染包** |
+| `--scratch-dir DIR` | 指定临时产物根 |
+| `--write-into-package` | **显式**才写回包内 `call_level.jsonl`（调试；正式预检勿用） |
+| `--write-agents` | 可选写 agents；勿与污染包默认混用 |
 
-合并策略：`request.*` ← 包内 Gateway 抓包；`response` 必要时用 session；禁止编造 system/tools。
+合并策略：
 
-兼容 CLI（`--session-root` / `--gateway-root` / `--session-id`）**仅调试**；Agent **正式不得引导用户使用**。
+- `request.*` ← Gateway 抓包  
+- `response` 必要时用 session 补齐  
+- 禁止编造 system/tools  
+- **硬门槛**：每条 response 须有 `type=thinking` 且 **signature 非空**
 
 ---
 
@@ -114,20 +123,20 @@ trajectories/<模型>/
 
 | 覆盖 | 不覆盖 |
 | --- | --- |
-| 包布局、三模型 `session/`+`cc-gateway-log/` | 集合过题比例 |
-| 包内 Session ID 对齐与合并 | Docker Baseline/GT 实测 |
-| call-level 字段检测 | 甲方终审 |
+| 包布局；session + cc-gateway-log 成对 | 集合过题比例 |
+| 包内两路日志合并 → 临时 call-level | 写回用户包 |
+| 合并后甲方字段（tools/system/effort/**thinking+sig**） | Docker 真跑；甲方终审 |
 
 ---
 
 ## 报告怎么说
 
-1. 确认使用的路径：`PACK=…`  
-2. 贴 §A markdown 全文  
-3. 贴 §B 每模型：包内路径、session-id、records、FAIL/WARN、字段 PASS/FAIL  
-4. 结构/合并绿 ≠ 比例合格 ≠ 结算  
+1. `PACK=…`  
+2. §A markdown  
+3. §B 每模型：包内 session 路径、gateway 路径、session-id、**临时 out 路径**、records、字段 PASS/FAIL  
+4. 结构/合并绿 ≠ 终审  
 
-工作目录：包内文档所在的 `采集用户说明_final/`（或用户仓库中等价根）。
+工作目录：`采集用户说明_final/`（或仓库中等价根）。
 
 ## 权威口径
 

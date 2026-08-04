@@ -322,12 +322,13 @@ Agent 回答用户问题以本文件为准。每题格式：**结论** → **要
 
 ### G1b. call-level 合并用什么路径？
 
-**结论：同一数据包路径。**
+**结论：同一数据包路径。默认合并到系统临时目录，不写回你的包。**
 
 ```bash
 python3 上传前预检/scripts/merge_call_level.py --package <任务包> --check
 ```
 
+先在包内取 `session/` + `cc-gateway-log/` 合并出甲方 call-level，再做字段校验（含 thinking + 非空 signature）。  
 详见 `上传前预检/SKILL.md`。
 
 ### G2. 文档应该先看哪个？

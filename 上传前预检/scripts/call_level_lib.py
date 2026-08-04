@@ -813,6 +813,37 @@ def validate_call_level_records(
                 content = rd.get("content")
                 if not isinstance(content, list) or not content:
                     issues.append(Issue("FAIL", f"{prefix}_CONTENT", "response_data.content 须非空列表"))
+                else:
+                    # 众包预检：thinking 块 + signature 必填（禁止缺 sig / 禁止无 thinking）
+                    thinking_blocks = [
+                        b
+                        for b in content
+                        if isinstance(b, dict) and b.get("type") == "thinking"
+                    ]
+                    if not thinking_blocks:
+                        issues.append(
+                            Issue(
+                                "FAIL",
+                                f"{prefix}_THINKING",
+                                "response_data.content 须含至少一块 type=thinking",
+                            )
+                        )
+                    else:
+                        for ti, tb in enumerate(thinking_blocks):
+                            sig = tb.get("signature")
+                            if not isinstance(sig, str) or not sig.strip():
+                                issues.append(
+                                    Issue(
+                                        "FAIL",
+                                        f"{prefix}_THINKING_SIG_{ti}",
+                                        "thinking 块缺少非空 signature（think 的 signature 为必填）",
+                                    )
+                                )
+                        if all(
+                            isinstance(tb.get("signature"), str) and str(tb.get("signature")).strip()
+                            for tb in thinking_blocks
+                        ):
+                            pass  # 硬门槛已满足；总票在 CLIENT_CALL_LEVEL
                 stop = rd.get("stop_reason")
                 if stop not in VALID_STOP:
                     issues.append(Issue("FAIL", f"{prefix}_STOP", f"stop_reason 非法或空：{stop!r}"))
@@ -1307,8 +1338,14 @@ def full_merge_package_model(
     snapshot_out: Path | None = None,
     model: str = "",
     subagent_out_dir: Path | None = None,
+    *,
+    write_into_package: bool = False,
 ) -> tuple[list[dict[str, Any]], MergeReport, ResolvedPaths]:
-    """交卷包内单模型合并：只读 session/ + cc-gateway-log/，不回源本机 projects。"""
+    """交卷包内单模型合并：只读 session/ + cc-gateway-log/，不回源本机 projects。
+
+    默认不把产物写进用户包（须显式提供 out_path，或 write_into_package=True 时才写
+    model_dir/call_level.jsonl）。
+    """
     resolved = resolve_package_model(model_dir)
     report = MergeReport(session_id=resolved.session_id)
     for iss in resolved.issues:
@@ -1318,11 +1355,16 @@ def full_merge_package_model(
 
     model_dir = model_dir.expanduser().resolve()
     if out_path is None:
-        out_path = model_dir / "call_level.jsonl"
-    if subagent_out_dir is None and resolved.subagent_jsonls:
-        subagent_out_dir = model_dir / "session" / "subagents"
-        # write next to session side; use model-level subagents for call_level
+        if write_into_package:
+            out_path = model_dir / "call_level.jsonl"
+        else:
+            out_path = None  # in-memory only unless caller sets path
+
+    if subagent_out_dir is None and write_into_package and resolved.subagent_jsonls:
         subagent_out_dir = model_dir / "subagents_call_level"
+    elif not write_into_package and subagent_out_dir is None:
+        # keep subagent merge off-package unless out_path parent exists and caller set subagent dir
+        subagent_out_dir = None
 
     records, merge_report = full_merge(
         session_path=resolved.main_session,
@@ -1331,7 +1373,7 @@ def full_merge_package_model(
         agents_out=agents_out,
         snapshot_out=snapshot_out,
         model=model or model_dir.name,
-        subagent_jsonls=resolved.subagent_jsonls,
+        subagent_jsonls=resolved.subagent_jsonls if write_into_package or subagent_out_dir else resolved.subagent_jsonls,
         subagent_out_dir=subagent_out_dir,
         expected_session_id=resolved.session_id,
     )
@@ -1348,20 +1390,26 @@ def full_merge_package_model(
 def full_merge_package(
     package: Path,
     models: list[str] | None = None,
-    write_agents: bool = True,
-) -> list[tuple[str, list[dict[str, Any]], MergeReport, ResolvedPaths, Path]]:
+    write_agents: bool = False,
+    *,
+    out_root: Path | None = None,
+    write_into_package: bool = False,
+) -> list[tuple[str, list[dict[str, Any]], MergeReport, ResolvedPaths, Path | None]]:
     """合并数据包 trajectories 下全部（或选定）模型。
 
-    Returns list of (model_dir_name, records, report, resolved, out_path).
+    默认产物写到 out_root（临时目录）；write_into_package=True 时才写包内 call_level.jsonl。
+    默认不写 package/agents/。
+
+    Returns list of (model_dir_name, records, report, resolved, out_path|None).
     """
     package = package.expanduser().resolve()
     traj = package_traj_root(package)
-    results: list[tuple[str, list[dict[str, Any]], MergeReport, ResolvedPaths, Path]] = []
+    results: list[tuple[str, list[dict[str, Any]], MergeReport, ResolvedPaths, Path | None]] = []
     if not traj.is_dir():
         rep = MergeReport()
         rep.add("FAIL", "TRAJ_ROOT", f"数据包缺少 trajectories/：{package}")
         dummy = ResolvedPaths("", package, package, None, [], None, list(rep.issues))
-        results.append(("", [], rep, dummy, package / "call_level.jsonl"))
+        results.append(("", [], rep, dummy, None))
         return results
 
     model_dirs = discover_package_model_dirs(package)
@@ -1377,20 +1425,35 @@ def full_merge_package(
                 if p.is_dir():
                     model_dirs.append(p)
 
-    agents_out = package / "agents" if write_agents else None
+    agents_out = package / "agents" if write_agents and write_into_package else None
+    if write_agents and out_root is not None and not write_into_package:
+        agents_out = out_root / "agents"
+
     for i, md in enumerate(model_dirs):
-        out = md / "call_level.jsonl"
+        if write_into_package:
+            out: Path | None = md / "call_level.jsonl"
+            sub_out = md / "subagents_call_level" if (md / "session" / "subagents").is_dir() else None
+        elif out_root is not None:
+            safe = md.name.replace("/", "_")
+            out = out_root / safe / "call_level.jsonl"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            sub_out = out_root / safe / "subagents_call_level"
+        else:
+            out = None
+            sub_out = None
         ao = agents_out if write_agents and i == 0 else None
         recs, rep, resolved = full_merge_package_model(
             model_dir=md,
             out_path=out,
             agents_out=ao,
             model=md.name,
+            subagent_out_dir=sub_out,
+            write_into_package=write_into_package,
         )
         results.append((md.name, recs, rep, resolved, out))
     if not model_dirs:
         rep = MergeReport()
         rep.add("FAIL", "NO_MODELS", f"trajectories/ 下未找到 opus/qwen/glm 模型目录：{traj}")
         dummy = ResolvedPaths("", traj, traj, None, [], None, list(rep.issues))
-        results.append(("", [], rep, dummy, traj / "call_level.jsonl"))
+        results.append(("", [], rep, dummy, None))
     return results

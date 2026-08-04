@@ -91,6 +91,6 @@ A：**众包日常不要求。** 每模型每题 1 条轨迹即可；看你交�
 A：不算。结构预检只做文件检查；call-level 合并仅验轨迹字段；集合比例须自核；**最终以甲方实际审核为准。**
 
 **Q：要不要自己做 call-level？**  
-A：不必手写。整理好数据包后：  
+A：不必手写。交卷只需整理好 `session/` + `cc-gateway-log/`。预检会在**临时目录**合并并校验甲方字段，**不改你的包**：  
 `python3 上传前预检/scripts/merge_call_level.py --package <任务包> --check`  
-只用包内 `session/` + `cc-gateway-log/`。详见 [上传前预检/SKILL.md](./上传前预检/SKILL.md)。
+详见 [上传前预检/SKILL.md](./上传前预检/SKILL.md)。

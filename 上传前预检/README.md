@@ -7,10 +7,11 @@
 # §A 结构
 python3 scripts/presubmit_check.py --task-dir <数据包> --markdown
 
-# §B 包内 session + cc-gateway-log 合并校验（同一路径）
+# §B 包内 session + cc-gateway-log 合并到临时目录，再校验甲方 call-level（同一 PACK）
+# 默认不写回数据包
 python3 scripts/merge_call_level.py --package <数据包> --check
 ```
 
-两段都只读该数据包；**不**回源本机 Claude / Gateway 原始目录。  
+§B：只读包内两路日志 → 临时 `call_level.jsonl` → 字段校验（含 thinking + 非空 signature）。  
 结构/合并绿 ≠ 结算；**最终以甲方实际审核为准。**  
-完整 Agent 规则：[SKILL.md](./SKILL.md)。
+完整规则：[SKILL.md](./SKILL.md)。
