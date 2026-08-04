@@ -19,7 +19,7 @@ Agent 回答用户问题以本文件为准。每题格式：**结论** → **要
 - Gateway 日志：本机 `<root_dir>/<sessionId>/*.json` → 交卷 `trajectories/<模型>/cc-gateway-log/`  
 - 交卷：数据包 + 每模型 **`session/` + `cc-gateway-log/`，缺一不可**
 
-**文档**：`cc-gateway/README.md`；`Gateway采集说明.md`（§0 自检 + 教程）；`用户操作步骤.md` 第 0、1 步；`参与方式.md`。
+**文档**：`cc-gateway/README.md`（**字段级配置 + 逐步验收 + Session ID 图解，优先看**）；`Gateway采集说明.md` §0；`用户操作步骤.md` 第 0、1 步。
 
 ### A2. 采数前要确认什么？
 

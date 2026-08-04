@@ -28,7 +28,7 @@
 | 文档 / 资源 | 用途 |
 | --- | --- |
 | [用户操作步骤.md](./用户操作步骤.md) | 主线：怎么做 |
-| [cc-gateway/](./cc-gateway/) | **本机预编译 Gateway**（先做接通自检） |
+| [cc-gateway/README.md](./cc-gateway/README.md) | **Gateway 从零手册**：yaml 怎么写、逐步验证、Session ID 怎么对 |
 | [Gateway采集说明.md](./Gateway采集说明.md) | 自检清单、启动、切换模型、双目录交卷、Session ID |
 | [甲方要求说明.md](./甲方要求说明.md) | 门槛、字段、Checklist、甲方要求一览 |
 | [参与方式.md](./参与方式.md) | 谁可参与、如何报名进群 |

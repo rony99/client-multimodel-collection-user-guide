@@ -11,8 +11,8 @@ cc-gateway/
   cc-gateway-win/
 ```
 
-> 更短的启动备忘见 [cc-gateway/README.md](./cc-gateway/README.md)；平台架构细节以各子目录 `使用说明.md` 为准。  
-> 操作主线仍见 [用户操作步骤.md](./用户操作步骤.md)。
+> **从零配置 / 逐步验收 / Session ID 怎么对**：请先完整看 [cc-gateway/README.md](./cc-gateway/README.md)（字段说明、yaml 示例、成功判定）。  
+> 下文 §0 是验收清单摘要；包内另有各系统 `使用说明.md`。操作主线见 [用户操作步骤.md](./用户操作步骤.md)。
 
 <span style="color:#d93025">
 <strong>硬要求（务必记住）：</strong><br/>
@@ -28,6 +28,9 @@ cc-gateway/
 ## 0. 接通自检（采题前必做）
 
 目的：确认「能通三套模型配置」+「Session ID 与落盘一致」。**全部通过后**再做出题与正式三模型轨迹。
+
+**逐步操作（推荐照抄）：** [cc-gateway/README.md](./cc-gateway/README.md) 第 3–5 节  
+（含「`providers.yaml` 每个字段怎么写」「Session ID 一样」示意图与命令）。
 
 ### 0.1 选对二进制
 
