@@ -115,7 +115,7 @@ python3 上传前预检/scripts/merge_call_level.py \
 - `request.*` ← Gateway 抓包  
 - `response` 必要时用 session 补齐  
 - 禁止编造 system/tools  
-- **硬门槛**：每条 response 须有 `type=thinking` 且 **signature 非空**
+- **硬门槛**：每条 response 须有 `type=thinking` 且 **`signature` 非空**（**thinking 正文可为空**）
 
 ---
 
@@ -125,7 +125,7 @@ python3 上传前预检/scripts/merge_call_level.py \
 | --- | --- |
 | 包布局；session + cc-gateway-log 成对 | 集合过题比例 |
 | 包内两路日志合并 → 临时 call-level | 写回用户包 |
-| 合并后甲方字段（tools/system/effort/**thinking+sig**） | Docker 真跑；甲方终审 |
+| 合并后甲方字段（tools/system/effort/**thinking 有块 + sig 非空**；正文可空） | Docker 真跑；甲方终审 |
 
 ---
 

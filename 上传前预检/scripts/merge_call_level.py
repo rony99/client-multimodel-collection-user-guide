@@ -60,7 +60,7 @@ def _check_result(records, issues) -> int:
     print(f"- 甲方 call-level（合并后）: {'PASS' if client_ok else 'FAIL'}")
     if not client_ok:
         print(
-            "  （须 session+gateway 合并成功；system/tools/effort/thinking 非空 signature 等）"
+            "  （须 session+gateway 合并成功；system/tools/effort；thinking 块 signature 非空，正文可空）"
         )
     for i in v_issues:
         if i.code in ("COUNT", "SCHEMA", "CLIENT_CALL_LEVEL") or i.level == "FAIL":

@@ -814,7 +814,7 @@ def validate_call_level_records(
                 if not isinstance(content, list) or not content:
                     issues.append(Issue("FAIL", f"{prefix}_CONTENT", "response_data.content 须非空列表"))
                 else:
-                    # 众包预检：thinking 块 + signature 必填（禁止缺 sig / 禁止无 thinking）
+                    # 众包预检：须有 type=thinking 块；signature 非空（thinking 正文可为空）
                     thinking_blocks = [
                         b
                         for b in content
@@ -836,14 +836,9 @@ def validate_call_level_records(
                                     Issue(
                                         "FAIL",
                                         f"{prefix}_THINKING_SIG_{ti}",
-                                        "thinking 块缺少非空 signature（think 的 signature 为必填）",
+                                        "thinking.signature 不得为空（thinking 文本可空，signature 必填非空）",
                                     )
                                 )
-                        if all(
-                            isinstance(tb.get("signature"), str) and str(tb.get("signature")).strip()
-                            for tb in thinking_blocks
-                        ):
-                            pass  # 硬门槛已满足；总票在 CLIENT_CALL_LEVEL
                 stop = rd.get("stop_reason")
                 if stop not in VALID_STOP:
                     issues.append(Issue("FAIL", f"{prefix}_STOP", f"stop_reason 非法或空：{stop!r}"))
