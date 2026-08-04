@@ -2,19 +2,26 @@
 
 本文件夹可独立使用。
 
-请按 **[用户操作步骤.md](./用户操作步骤.md)** 完成配连接、出题、调难度与交卷。
+## 开始前请先这样走
 
-**本地 Gateway 预编译包已放在仓库内：[cc-gateway/](./cc-gateway/)**（mac / linux / win）。  
-专章：**[Gateway采集说明.md](./Gateway采集说明.md)**。
+1. **先读并照做 [cc-gateway/README.md](./cc-gateway/README.md)**（Gateway 操作主手册：配置 `providers.yaml`、启动、逐步验收）。  
+2. **先验证 Gateway 采集是否正常运行**（按该 README 第 5 节）：三套模型（A/B/C）都能通、Session ID 与 Claude Code 一致、且 Gateway log 里能搜到你的测试原文。  
+3. **自检全部通过后**，再按 **[用户操作步骤.md](./用户操作步骤.md)** 做出题、调难度与正式采数交卷。  
 
 <span style="color:#d93025">
-<strong>开跑前必做：</strong>先按 Gateway 说明「§0 接通自检」验证——三套模型配置（A GLM / B 千问 / C Opus）
-都能经由本机 Gateway 对话，且抓包目录名 = Session ID 并与 Claude Code 默认会话 ID 一致。
-自检通过后才能进正式采集。采题期间<strong>保持 Gateway 开启</strong>。
-交卷每个模型必须<strong>同时</strong>交 <code>session/</code>（Claude Code）与 <code>cc-gateway-log/</code>（Gateway），<strong>缺一不可</strong>。
+<strong>不要跳过 Gateway 验收。</strong>未按
+<a href="./cc-gateway/README.md">cc-gateway/README.md</a>
+完成验证、不能确认采集落盘正常，请勿开始正式轨迹采集。
+采题期间<strong>保持 Gateway 开启</strong>。
+交卷每个模型必须<strong>同时</strong>交 <code>session/</code>（Claude Code）与 <code>cc-gateway-log/</code>（Gateway），
+<strong>缺一不可</strong>。
 </span>
 
-[甲方要求说明.md](./甲方要求说明.md) 含门槛细则与文末「甲方要求一览」；日常以操作步骤为主。
+**本地 Gateway 预编译包：** [cc-gateway/](./cc-gateway/)（mac / linux / win）  
+**众包口径与清单补充：** [Gateway采集说明.md](./Gateway采集说明.md)  
+**出题与交卷主线：** [用户操作步骤.md](./用户操作步骤.md)
+
+[甲方要求说明.md](./甲方要求说明.md) 含门槛细则与文末「甲方要求一览」。
 
 交卷前可用 **[上传前预检/](./上传前预检/)**：用户**只提供数据包目录路径**即可  
 （§A 结构 + §B 包内 `session/`/`cc-gateway-log` 合并校验；未给路径时先询问）。  
@@ -27,9 +34,9 @@
 
 | 文档 / 资源 | 用途 |
 | --- | --- |
-| [用户操作步骤.md](./用户操作步骤.md) | 主线：怎么做 |
-| [cc-gateway/README.md](./cc-gateway/README.md) | **Gateway 从零手册**：yaml 怎么写、逐步验证、Session ID 怎么对 |
-| [Gateway采集说明.md](./Gateway采集说明.md) | 自检清单、启动、切换模型、双目录交卷、Session ID |
+| **[cc-gateway/README.md](./cc-gateway/README.md)** | **先看这份**：Gateway 怎么配、怎么跑、怎么先验采集是否正常 |
+| [用户操作步骤.md](./用户操作步骤.md) | Gateway 验证通过后的主线：出题、调难度、交卷 |
+| [Gateway采集说明.md](./Gateway采集说明.md) | 众包硬规矩、交卷 checklist、与操作步骤的口径补充 |
 | [甲方要求说明.md](./甲方要求说明.md) | 门槛、字段、Checklist、甲方要求一览 |
 | [参与方式.md](./参与方式.md) | 谁可参与、如何报名进群 |
 | [甲方数据包参考样例/](./甲方数据包参考样例/) | 交卷结构样例 |
@@ -41,8 +48,8 @@
 - **对象**：理工类程序员相关从业者（前后端、数据分析、测试、DevOps 等）  
 - **门槛**：Claude Code 完成过 ≥2 个项目；有 Docker 与单元测试经验  
 - **报名**：微信发给 **栗子** 进群  
-- **开跑前**：用仓库内 [cc-gateway/](./cc-gateway/) 做 **§0 接通自检**（通三模型 + Session ID 对齐）  
-- **开跑后**：保持 Gateway 开启，用**自己的账号**采千问 / GLM / Opus；每模型**同时**交 **`session/` + `cc-gateway-log/`**（**缺一不可**）
+- **开跑前**：必读 [cc-gateway/README.md](./cc-gateway/README.md)，**先验 Gateway 采集是否正常**（通 A/B/C、Session ID 对齐、log 能搜到测试文本），再开正式采数  
+- **开跑后**：保持 Gateway 开启；每模型**同时**交 **`session/` + `cc-gateway-log/`**（**缺一不可**）
 
 ## 提交量与分布（摘要）
 
@@ -54,14 +61,14 @@
 
 ## FAQ
 
+**Q：Gateway 装在哪？先测什么？**  
+A：包在 [cc-gateway/](./cc-gateway/)。**操作与验证一律按 [cc-gateway/README.md](./cc-gateway/README.md)**：配置、启动、第 5 节验收（通模型、Session ID、log 含测试原文）。先验 Gateway 采集正常，再进 [用户操作步骤.md](./用户操作步骤.md)。  
+
 **Q：平台会提供模型 API / 密钥吗？**  
-A：**不会。** 使用本地 **Gateway（cc-gateway）**；你用自己的 Key / Claude 订阅。用法见 [Gateway采集说明.md](./Gateway采集说明.md)。
+A：**不会。** 用本地 Gateway + 自己的 Key / Claude 订阅。先读 [cc-gateway/README.md](./cc-gateway/README.md)。
 
 **Q：可以绕过 Gateway、直连厂商 API 吗？**  
-A：正式采集须走 Gateway，否则没有 Session 目录抓包。不要用未接入 Gateway 的直连冒充正式轨迹。
-
-**Q：Gateway 装在哪？先测什么？**  
-A：仓库 [cc-gateway/](./cc-gateway/)。**正式采题前必须做 Gateway 说明 §0**：三套 active 都能对话、抓包目录名 = Session ID 且与 Claude Code 一致。通过后再采集。
+A：正式采集须走 Gateway，否则没有合规 `cc-gateway-log`。不要用未接入 Gateway 的直连冒充正式轨迹。
 
 **Q：Gateway 日志在哪？和 Session 什么关系？**  
 A：本机默认 `~/.claude_lproxy/projects/<sessionId>/*.json`，**文件夹名 = Session ID**。交卷拷入 `trajectories/<模型>/cc-gateway-log/`，与 `session/` 同一 ID。**session + Gateway 日志都要交，缺一不可。**
