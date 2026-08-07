@@ -33,12 +33,21 @@
 
 结构绿 / call-level 绿 ≠ 比例合格 ≠ 结算。**最终以甲方实际审核为准。**
 
+## 提交入口
+
+整理好**一道题一个文件夹**并压成 **.zip** 后，在线上传提交：
+
+**[https://www.shixianw.com/3bench/upload](https://www.shixianw.com/3bench/upload)**
+
+请在该页完成上传，不要改走其它渠道当正式交卷。单包 **≤ 100MB**、仅 **.zip**；解压后应直接是与 zip **同名**的一层任务目录（不要多层嵌套，也不要多题打进同一个 zip）。页面上有目录结构示例，细节与字段仍以本仓库文档为准。
+
 有疑问时，可先让 Agent 加载 **[qa_skill/](./qa_skill/)**（读 `SKILL.md`）按口径交流答疑。
 
 想参与采集？见 **[参与方式.md](./参与方式.md)**。
 
 | 文档 / 资源 | 用途 |
 | --- | --- |
+| **[提交入口](https://www.shixianw.com/3bench/upload)** | **正式交卷上传**（.zip，单包 ≤100MB） |
 | **[cc-gateway/README.md](./cc-gateway/README.md)** | **先看这份**：Gateway 怎么配、怎么跑、怎么先验采集是否正常 |
 | [用户操作步骤.md](./用户操作步骤.md) | Gateway 验证通过后的主线：出题、调难度、交卷 |
 | [Gateway采集说明.md](./Gateway采集说明.md) | 众包硬规矩、交卷 checklist、与操作步骤的口径补充 |
@@ -54,7 +63,8 @@
 - **门槛**：Claude Code 完成过 ≥2 个项目；有 Docker 与单元测试经验  
 - **报名**：微信发给 **栗子** 进群  
 - **开跑前**：必读 [cc-gateway/README.md](./cc-gateway/README.md)，**先验 Gateway 采集是否正常**（通 A/B/C、Session ID 对齐、log 能搜到测试文本），再开正式采数  
-- **开跑后**：保持 Gateway 开启；每模型**同时**交 **`session/` + `cc-gateway-log/`**（**缺一不可**）
+- **开跑后**：保持 Gateway 开启；每模型**同时**交 **`session/` + `cc-gateway-log/`**（**缺一不可**）  
+- **提交**：整理 zip 后上传到 **[https://www.shixianw.com/3bench/upload](https://www.shixianw.com/3bench/upload)**
 
 ## 提交量与分布（摘要）
 
@@ -94,3 +104,6 @@ A：不算。结构预检只做文件检查；call-level 合并仅验轨迹字�
 A：不必手写。交卷只需整理好 `session/` + `cc-gateway-log/`。预检会在**临时目录**合并并校验甲方字段，**不改你的包**：  
 `python3 上传前预检/scripts/merge_call_level.py --package <任务包> --check`  
 详见 [上传前预检/SKILL.md](./上传前预检/SKILL.md)。
+
+**Q：整理好的包提交到哪里？**  
+A：上传页 **[https://www.shixianw.com/3bench/upload](https://www.shixianw.com/3bench/upload)**。一道题一个 zip，单包 ≤100MB；解压后仅一层与 zip 同名的任务目录。
