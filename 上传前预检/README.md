@@ -12,6 +12,6 @@ python3 scripts/presubmit_check.py --task-dir <数据包> --markdown
 python3 scripts/merge_call_level.py --package <数据包> --check
 ```
 
-§B：只读包内两路日志 → 临时 `call_level.jsonl` → 字段校验（须有 thinking 块且 **signature 非空**；thinking 文本可空）。  
+§B：只读包内两路日志 → 临时 `call_level.jsonl` → 字段校验（有 `type=thinking` 时 **Opus 强制 signature 非空**；GLM/千问不硬检 sig；无 thinking 块不查；thinking 文本可空）。  
 结构/合并绿 ≠ 结算；**最终以甲方实际审核为准。**  
 完整规则：[SKILL.md](./SKILL.md)。

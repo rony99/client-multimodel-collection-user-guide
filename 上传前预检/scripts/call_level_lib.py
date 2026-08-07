@@ -725,6 +725,14 @@ def write_agents(agents_out: Path, payload: dict[str, Any]) -> None:
         )
 
 
+def _is_opus_model(model: str) -> bool:
+    """True for claude-opus* / *opus* routes; GLM/Qwen are non-Opus."""
+    m = str(model or "").strip().lower().replace("_", "-")
+    if not m:
+        return False
+    return "opus" in m
+
+
 def validate_call_level_records(
     records: list[dict[str, Any]],
     assistant_count: int | None = None,
@@ -814,31 +822,31 @@ def validate_call_level_records(
                 if not isinstance(content, list) or not content:
                     issues.append(Issue("FAIL", f"{prefix}_CONTENT", "response_data.content 须非空列表"))
                 else:
-                    # 众包预检：须有 type=thinking 块；signature 非空（thinking 正文可为空）
+                    # thinking / signature：仅当 content 已含 type=thinking 时才查；
+                    # signature 硬门槛仅 Opus；GLM/千问有 thinking 但无 sig 不 FAIL。
                     thinking_blocks = [
                         b
                         for b in content
                         if isinstance(b, dict) and b.get("type") == "thinking"
                     ]
-                    if not thinking_blocks:
-                        issues.append(
-                            Issue(
-                                "FAIL",
-                                f"{prefix}_THINKING",
-                                "response_data.content 须含至少一块 type=thinking",
-                            )
-                        )
-                    else:
-                        for ti, tb in enumerate(thinking_blocks):
-                            sig = tb.get("signature")
-                            if not isinstance(sig, str) or not sig.strip():
-                                issues.append(
-                                    Issue(
-                                        "FAIL",
-                                        f"{prefix}_THINKING_SIG_{ti}",
-                                        "thinking.signature 不得为空（thinking 文本可空，signature 必填非空）",
+                    if thinking_blocks:
+                        model_name = ""
+                        if isinstance(req, dict):
+                            model_name = str(req.get("model") or "")
+                        if not model_name:
+                            model_name = str(rd.get("model") or "")
+                        require_sig = _is_opus_model(model_name)
+                        if require_sig:
+                            for ti, tb in enumerate(thinking_blocks):
+                                sig = tb.get("signature")
+                                if not isinstance(sig, str) or not sig.strip():
+                                    issues.append(
+                                        Issue(
+                                            "FAIL",
+                                            f"{prefix}_THINKING_SIG_{ti}",
+                                            "Opus：存在 type=thinking 时 signature 须非空（thinking 正文可空）",
+                                        )
                                     )
-                                )
                 stop = rd.get("stop_reason")
                 if stop not in VALID_STOP:
                     issues.append(Issue("FAIL", f"{prefix}_STOP", f"stop_reason 非法或空：{stop!r}"))

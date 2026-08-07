@@ -76,7 +76,7 @@ Agent 回答用户问题以本文件为准。每题格式：**结论** → **要
   **只读包内** `session/` + `cc-gateway-log/`，产物默认在**临时目录**（见 [上传前预检/SKILL.md](../上传前预检/SKILL.md) §B）。  
 - **禁止**编造 system/tools；request 取 Gateway，response 必要时用 session 补。  
 - 用户侧**不要求**手工写 call-level；正式预检默认**不**改你包，也**不**强制写包内 `agents/`。  
-- thinking：**signature 非空**；thinking 文本可空。  
+- thinking / signature：**仅当 content 含 `type=thinking` 时检查**；**Opus 要求 signature 非空**；**GLM/千问不硬检 sig**；无 thinking 块不查；thinking 文本可空。  
 - **最终以甲方实际审核为准**。
 
 **文档**：`用户操作步骤.md` 第 6 / 8 步；`上传前预检/SKILL.md` §B。
@@ -329,7 +329,7 @@ Agent 回答用户问题以本文件为准。每题格式：**结论** → **要
 python3 上传前预检/scripts/merge_call_level.py --package <任务包> --check
 ```
 
-先在包内取 `session/` + `cc-gateway-log/` 合并出甲方 call-level，再做字段校验：须有 thinking 块且 **signature 非空**（thinking 文本可空）。  
+先在包内取 `session/` + `cc-gateway-log/` 合并出甲方 call-level，再做字段校验：仅当存在 `type=thinking` 时查 signature；**Opus 硬要求 signature 非空**；GLM/千问不硬检；无 thinking 块不查。  
 详见 `上传前预检/SKILL.md`。
 
 ### G2. 文档应该先看哪个？

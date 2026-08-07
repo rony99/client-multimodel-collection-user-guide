@@ -3,7 +3,8 @@ name: client-harbor-presubmit
 description: >-
   上传前预检众包任务包。用户只需提供一个「甲方数据包」目录路径。
   有路径后：§A 结构；§B 在包内定位 session/ 与 cc-gateway-log/、合并到临时目录（不写回数据包）、
-  再对合并后的 call-level 做甲方日志字段校验（须有 thinking 块；**signature 非空**；thinking 正文可空）。
+  再对合并后的 call-level 做甲方日志字段校验（system/tools/effort 等；
+  **有 type=thinking 时 Opus 才硬检 signature 非空**；GLM/千问不硬检 sig；无 thinking 块不查；thinking 正文可空）。
   未给路径时必须先询问。不查集合过题比例；绿 ≠ 终审。
 ---
 
@@ -60,7 +61,7 @@ PACK = 用户数据包目录
     → §B：merge_call_level.py --package PACK --check
          · 只读 trajectories/<模型>/session/ 与 cc-gateway-log/
          · 合并到系统临时目录（scratch）
-         · 校验合并后 JSONL：thinking 块 + **signature 非空**（正文可空）
+         · 校验合并后 JSONL：有 thinking 时 Opus 强制 **signature 非空**；GLM/千问与无 thinking 时不硬检 sig
     → 汇报两段结果；说明临时目录路径（可选调试）
 ```
 
@@ -115,7 +116,11 @@ python3 上传前预检/scripts/merge_call_level.py \
 - `request.*` ← Gateway 抓包  
 - `response` 必要时用 session 补齐  
 - 禁止编造 system/tools  
-- **硬门槛**：每条 response 须有 `type=thinking` 且 **`signature` 非空**（**thinking 正文可为空**）
+- **thinking / signature 硬门槛**（仅合并校验用）：
+  - **仅当** `response_data.content` 中已有 `type=thinking` 块时才检查 signature  
+  - **无 thinking 块 → 不查** signature（不因此 FAIL）  
+  - **Opus**：有 thinking 时 **`signature` 须非空**（thinking 正文可空）  
+  - **GLM / 千问**：有 thinking 也不把 signature 当作硬性要求
 
 ---
 
@@ -125,7 +130,7 @@ python3 上传前预检/scripts/merge_call_level.py \
 | --- | --- |
 | 包布局；session + cc-gateway-log 成对 | 集合过题比例 |
 | 包内两路日志合并 → 临时 call-level | 写回用户包 |
-| 合并后甲方字段（tools/system/effort/**thinking 有块 + sig 非空**；正文可空） | Docker 真跑；甲方终审 |
+| 合并后甲方字段（tools/system/effort；**Opus 有 thinking 则 sig 非空**；GLM/千问不硬检 sig） | Docker 真跑；甲方终审 |
 
 ---
 
