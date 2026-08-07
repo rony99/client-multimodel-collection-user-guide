@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from dataclasses import asdict, dataclass, field
@@ -27,6 +28,43 @@ PACKAGE_DIR_ALIASES = ("package", "task_package", "harbor_package")
 
 SECRET_RE = re.compile(
     r"(?i)(api[_-]?key|secret|password|token)\s*[=:]\s*['\"]?[A-Za-z0-9_\-]{8,}"
+)
+
+# Dockerfile 固定版本：禁止 :latest / 无 tag 的 base，以及 install @latest
+FROM_LINE_RE = re.compile(
+    r"^\s*FROM\s+(?:--\S+\s+)*(?P<img>\S+)",
+    re.IGNORECASE | re.MULTILINE,
+)
+# 行内显式 :latest 或 @latest（镜像 / 包）
+EXPLICIT_LATEST_RE = re.compile(
+    r"(?i)(?::|@)latest(?:\s|$|[\"'])",
+)
+# workspace 禁止出现的目录名（含嵌套）
+WS_FORBIDDEN_DIR_NAMES = frozenset(
+    {
+        "node_modules",
+        ".venv",
+        "venv",
+        "dist",
+        "build",
+        ".next",
+        "ground_truth",
+        "__pycache__",
+        ".git",
+    }
+)
+SECRET_EXTRA_RE = re.compile(
+    r"(?i)(sk-[a-z0-9]{20,}|AKIA[0-9A-Z]{16}|xox[baprs]-[0-9a-zA-Z-]{10,})"
+)
+INSTRUCTION_LEAK_TERMS = (
+    "ground_truth",
+    "assert ",
+    "assert(",
+    "pytest",
+    "test.sh",
+    "unittest",
+    "hidden test",
+    "参考答案",
 )
 
 DISCLAIMER = (
@@ -177,6 +215,7 @@ def check_core_files(package: Path, report: Report) -> None:
         ("instruction.md", "INSTRUCTION"),
         ("task.toml", "TASK_TOML"),
         ("meta.json", "META"),
+        ("README.md", "README"),
         ("environment/Dockerfile", "DOCKERFILE"),
         ("environment/workspace", "WORKSPACE"),
         ("tests/test.sh", "TEST_SH"),
@@ -191,15 +230,21 @@ def check_core_files(package: Path, report: Report) -> None:
             report.add("FAIL", code, f"缺失：{rel}")
 
     for rel, code in [
-        ("README.md", "README"),
         ("tests/test_outputs.py", "TEST_OUTPUTS"),
         ("environment/workspace.tar.gz", "WORKSPACE_TAR"),
         ("scores/rubric_scores.json", "SCORES"),
+        ("manifest.json", "MANIFEST"),
     ]:
         p = package / rel
         if p.exists():
             report.add("PASS", code, f"存在：{rel}")
-        # 缺可选文件不打 WARN，避免几乎无法 PRECHECK_PASS
+        elif rel == "manifest.json":
+            report.add(
+                "WARN",
+                "MANIFEST",
+                "缺少 manifest.json（建议填写阶段 / 已采模型；见甲方要求说明 §5.5）",
+            )
+        # 其它可选：缺则不打 WARN，避免几乎无法 PRECHECK_PASS
 
     root = package.parent
     if (package / "reports").is_dir() or (root / "reports").is_dir():
@@ -213,6 +258,220 @@ def check_core_files(package: Path, report: Report) -> None:
         report.add("FAIL", "GT", "缺失标准答案：需要 ground_truth/ 或 solution/solve.sh")
 
 
+def _read_text_capped(path: Path, limit: int = 256_000) -> str:
+    try:
+        return path.read_bytes()[:limit].decode("utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
+def _dockerfile_image_unpinned(image_ref: str) -> str | None:
+    """Return fail reason if image ref is unpinned; None if OK."""
+    ref = image_ref.strip().strip("'\"")
+    if not ref or ref.upper() == "SCRATCH":
+        return None
+    # multi-stage: "name AS alias" already stripped to img by regex; may still have AS
+    ref = re.split(r"\s+", ref, maxsplit=1)[0]
+    lower = ref.lower()
+    if lower.endswith(":latest") or lower.endswith("@latest"):
+        return f"使用 :latest：`{ref}`"
+    # digest form registry/path@sha256:...
+    if "@sha256:" in lower or re.search(r"@sha[0-9]+:", lower):
+        return None
+    # tagged: last path segment after last / must contain :tag (not only registry host:port)
+    # Heuristic: has ":" after last "/" → tagged (port in host:5000/img is before last /)
+    last = ref.rsplit("/", 1)[-1]
+    if ":" in last:
+        tag = last.rsplit(":", 1)[-1]
+        if tag.lower() == "latest":
+            return f"使用 :latest：`{ref}`"
+        return None
+    return f"base 镜像未固定 tag/digest：`{ref}`（禁止隐式 latest）"
+
+
+def _dockerfile_unpinned_pip_tokens(body: str) -> list[str]:
+    """Heuristic: bare `pip install pkg` without version constraint → tokens to WARN."""
+    warns: list[str] = []
+    for m in re.finditer(r"\bpip(?:3)?\s+install\b([^\n\\]*)", body, re.IGNORECASE):
+        rest = m.group(1)
+        if re.search(r"(^|\s)-r\s", rest):
+            continue
+        if re.search(r"(^|\s)-e\s", rest) or "requirements" in rest.lower():
+            continue
+        for tok in rest.split():
+            if tok.startswith("-") or tok.startswith("http://") or tok.startswith("https://"):
+                continue
+            # keep package-like names
+            if re.search(r"==|>=|<=|~=|!=|@|>|<", tok):
+                continue
+            clean = tok.strip("'\"")
+            if not clean or clean in (".", "..") or clean.startswith("."):
+                continue
+            # -i index URL leftover, common mirror flags already skipped via -
+            if "/" in clean and not clean.startswith("git+"):
+                continue
+            warns.append(clean)
+    return warns
+
+
+def check_dockerfile_pins(package: Path, report: Report) -> None:
+    """甲方：依赖须固定版本；禁止 Docker 镜像/包用 latest。"""
+    path = package / "environment" / "Dockerfile"
+    if not path.is_file():
+        return
+    text = path.read_text(encoding="utf-8", errors="replace")
+    lines_no_comment: list[str] = []
+    for line in text.splitlines():
+        lines_no_comment.append(line.split("#", 1)[0])
+    body = "\n".join(lines_no_comment)
+
+    fail_hits: list[str] = []
+    for m in FROM_LINE_RE.finditer(body):
+        reason = _dockerfile_image_unpinned(m.group("img"))
+        if reason:
+            fail_hits.append(f"FROM：{reason}")
+
+    for i, raw in enumerate(text.splitlines(), start=1):
+        code = raw.split("#", 1)[0]
+        if not EXPLICIT_LATEST_RE.search(code):
+            continue
+        # FROM 行已由 base 镜像规则覆盖
+        if re.match(r"^\s*FROM\b", code, re.IGNORECASE):
+            continue
+        fail_hits.append(f"L{i}: 禁止使用 latest（`{raw.strip()[:80]}`）")
+
+    seen: set[str] = set()
+    uniq: list[str] = []
+    for h in fail_hits:
+        if h not in seen:
+            seen.add(h)
+            uniq.append(h)
+
+    if uniq:
+        for h in uniq[:8]:
+            report.add(
+                "FAIL",
+                "DOCKER_UNPINNED",
+                f"Dockerfile 依赖未钉死版本：{h}。须固定 tag/digest（如 ubuntu:24.04），禁止 latest",
+            )
+        if len(uniq) > 8:
+            report.add(
+                "FAIL",
+                "DOCKER_UNPINNED_MORE",
+                f"另有 {len(uniq) - 8} 处未钉版本（略）",
+            )
+    else:
+        report.add(
+            "PASS",
+            "DOCKER_PIN",
+            "Dockerfile base 镜像未见 :latest / 无 tag；符合固定版本要求（静态规则）",
+        )
+
+    pip_warns = _dockerfile_unpinned_pip_tokens(body)
+    if pip_warns:
+        shown = ", ".join(pip_warns[:6])
+        more = f" 等共 {len(pip_warns)} 项" if len(pip_warns) > 6 else ""
+        report.add(
+            "WARN",
+            "DOCKER_PIP_UNPINNED",
+            f"Dockerfile 中 pip install 疑似未钉版本：{shown}{more}（甲方要求依赖固定版本，建议 pkg==x.y.z）",
+        )
+    else:
+        report.add("PASS", "DOCKER_PIP_PIN", "Dockerfile 未见明显未钉版本的 pip install 包名")
+
+
+def check_test_sh(package: Path, report: Report) -> None:
+    """禁止空壳 test.sh（如仅 exit 0）。"""
+    path = package / "tests" / "test.sh"
+    if not path.is_file():
+        return
+    text = path.read_text(encoding="utf-8", errors="replace")
+    solid: list[str] = []
+    for line in text.splitlines():
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        if s.startswith("#!"):
+            continue
+        # set -e 等不算“测试体”
+        if re.match(r"^set\s+-", s):
+            continue
+        solid.append(s)
+    if not solid:
+        report.add("FAIL", "TEST_SH_EMPTY", "tests/test.sh 无有效命令，疑似空壳")
+        return
+    trivial = True
+    for s in solid:
+        if re.fullmatch(r"exit\s+0;?", s, re.IGNORECASE):
+            continue
+        if s in (":", "true"):
+            continue
+        trivial = False
+        break
+    if trivial:
+        report.add(
+            "FAIL",
+            "TEST_SH_SHELL",
+            "tests/test.sh 疑似空壳（实质仅 exit 0 / true），禁止恒通过测试",
+        )
+        return
+    if len(solid) < 3:
+        report.add(
+            "WARN",
+            "TEST_SH_THIN",
+            f"tests/test.sh 有效命令很少（{len(solid)} 行），请确认非敷衍判分",
+        )
+    else:
+        report.add("PASS", "TEST_SH_BODY", f"tests/test.sh 有实质内容（约 {len(solid)} 条有效命令）")
+
+
+def check_package_secrets(package: Path, report: Report) -> None:
+    """Dockerfile / workspace 常见密钥落点粗扫（不扫 trajectories / 大体积源码全量）。"""
+    candidates: list[Path] = []
+    df = package / "environment" / "Dockerfile"
+    if df.is_file():
+        candidates.append(df)
+    ws = package / "environment" / "workspace"
+    if ws.is_dir():
+        for p in ws.rglob("*"):
+            if not p.is_file():
+                continue
+            name = p.name.lower()
+            if (
+                name.startswith(".env")
+                or name in (".npmrc", "credentials.json", "secrets.yaml", "secrets.yml", "id_rsa")
+                or name.endswith(".pem")
+            ):
+                candidates.append(p)
+            if len(candidates) >= 40:
+                break
+
+    hits: list[str] = []
+    for p in candidates:
+        text = _read_text_capped(p)
+        if not text:
+            continue
+        if SECRET_RE.search(text) or SECRET_EXTRA_RE.search(text):
+            try:
+                rel = str(p.relative_to(package))
+            except ValueError:
+                rel = str(p)
+            hits.append(rel)
+
+    if hits:
+        report.add(
+            "FAIL",
+            "PKG_SECRET",
+            "疑似真实密钥/token：" + "; ".join(hits[:8]) + "（须移出包，换占位）",
+        )
+    else:
+        report.add(
+            "PASS",
+            "PKG_SECRET",
+            "Dockerfile / workspace 常见密钥文件未见明显硬编码密钥",
+        )
+
+
 def check_instruction(package: Path, report: Report) -> None:
     path = package / "instruction.md"
     if not path.is_file():
@@ -223,17 +482,18 @@ def check_instruction(package: Path, report: Report) -> None:
     else:
         report.add("PASS", "INSTRUCTION_LEN", "instruction.md 有实质内容")
     low = text.lower()
-    for bad in ("ground_truth", "assert ", "pytest", "test.sh"):
-        if bad in low and bad != "test.sh":
-            report.add(
-                "WARN",
-                "INSTRUCTION_LEAK",
-                f"instruction.md 可能提及敏感词「{bad}」，请确认未泄测试/答案",
-            )
-            break
+    leak_hits = [term for term in INSTRUCTION_LEAK_TERMS if term in low]
+    if leak_hits:
+        report.add(
+            "WARN",
+            "INSTRUCTION_LEAK",
+            "instruction.md 可能提及敏感词「"
+            + "」「".join(leak_hits[:4])
+            + "」，请确认未泄测试断言 / 答案路径",
+        )
     else:
         report.add("PASS", "INSTRUCTION_LEAK", "instruction.md 未见明显泄题关键词")
-    if SECRET_RE.search(text):
+    if SECRET_RE.search(text) or SECRET_EXTRA_RE.search(text):
         report.add("FAIL", "INSTRUCTION_SECRET", "instruction.md 疑似含密钥/token")
 
 
@@ -242,7 +502,7 @@ def check_task_toml(package: Path, report: Report) -> None:
     if not path.is_file():
         return
     text = path.read_text(encoding="utf-8", errors="replace")
-    if SECRET_RE.search(text) or re.search(r"(?i)sk-[a-z0-9]{10,}", text):
+    if SECRET_RE.search(text) or SECRET_EXTRA_RE.search(text):
         report.add("FAIL", "TOML_SECRET", "task.toml 疑似含真实密钥")
     else:
         report.add("PASS", "TOML_SECRET", "task.toml 未见明显硬编码密钥")
@@ -339,14 +599,29 @@ def check_workspace_clean(package: Path, report: Report) -> None:
     ws = package / "environment" / "workspace"
     if not ws.is_dir():
         return
-    bad = []
-    for name in ("node_modules", ".venv", "dist", "build", ".next", "ground_truth"):
-        if (ws / name).exists():
-            bad.append(name)
+    bad: list[str] = []
+    # 嵌套也查（如 src/__pycache__）；找到即跳过该子树继续
+    for dirpath, dirnames, _filenames in os.walk(ws):
+        drop: list[str] = []
+        for name in list(dirnames):
+            if name in WS_FORBIDDEN_DIR_NAMES:
+                rel = str(Path(dirpath, name).relative_to(ws))
+                bad.append(rel)
+                drop.append(name)
+        for name in drop:
+            dirnames.remove(name)
+        if len(bad) >= 12:
+            break
     if bad:
-        report.add("FAIL", "WS_DIRTY", f"workspace 不应包含：{', '.join(bad)}")
+        shown = ", ".join(bad[:8])
+        more = f" 等共 {len(bad)} 处" if len(bad) > 8 else ""
+        report.add(
+            "FAIL",
+            "WS_DIRTY",
+            f"workspace 不应包含：{shown}{more}（禁止 node_modules/.venv/__pycache__/.git/ground_truth 等）",
+        )
     else:
-        report.add("PASS", "WS_DIRTY", "workspace 未见常见污染目录")
+        report.add("PASS", "WS_DIRTY", "workspace 未见常见污染目录（含嵌套 __pycache__/.git 等）")
     files = [p for p in ws.rglob("*") if p.is_file()]
     if len(files) < 3:
         report.add("WARN", "WS_THIN", f"workspace 文件很少（{len(files)}），请确认是完整 Baseline")
@@ -565,6 +840,9 @@ def check_one_package(package: Path, root: Path, report: Report) -> None:
     report.add("PASS", "PKG_BEGIN", f"—— 检查数据包：{package.name}/ ——")
     check_dirname(package, report)
     check_core_files(package, report)
+    check_dockerfile_pins(package, report)
+    check_test_sh(package, report)
+    check_package_secrets(package, report)
     check_instruction(package, report)
     check_task_toml(package, report)
     check_meta(root, package, report)
@@ -647,10 +925,11 @@ def format_markdown(report: Report) -> str:
             "## 结构预检未覆盖（须自行验证；最终以甲方实际审核为准）",
             "",
             "- 集合：题量≥3；**每题千问均挂**；禁三模型全过；Opus 过题率 ≤ 60%；Opus−千问 > 20%；GLM ≥ 1 道过",
-            "- 平均 assistant 执行轮次 ≥ 20；私有题意（禁止直接改造公开 GitHub Issue）",
-            "- 每模型轨迹：session/ + cc-gateway-log/；平台不代提供模型 API（用户自备经 Gateway）",
+            "- 严格平均 assistant 执行轮次 ≥ 20（本脚本仅粗估行数 WARN）；私有题意 / 非公开 Issue 改造",
             "- Docker 内 Baseline FAIL / GT PASS 的完整复现（本脚本默认不做 Docker 构建）",
-            "- Rubric 人工/LLM 打分是否与测试结论一致",
+            "- apt/npm 全量 pin、pip 全量钉版本（Dockerfile 对 bare pip 仅 WARN；不替代人工）",
+            "- Rubric 人工/LLM 打分是否与测试结论一致；三模型条件完全一致的过题实测",
+            "- 每模型轨迹：session/ + cc-gateway-log/；平台不代提供模型 API（用户自备经 Gateway）",
             "",
         ]
     )
