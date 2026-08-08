@@ -56,25 +56,154 @@ WS_FORBIDDEN_DIR_NAMES = frozenset(
 SECRET_EXTRA_RE = re.compile(
     r"(?i)(sk-[a-z0-9]{20,}|AKIA[0-9A-Z]{16}|xox[baprs]-[0-9a-zA-Z-]{10,})"
 )
-INSTRUCTION_LEAK_TERMS = (
+INSTRUCTION_LEAK_HARD = (
     "ground_truth",
+    "参考答案",
+    "hidden test",
+    "hidden_test",
+)
+INSTRUCTION_LEAK_SOFT = (
     "assert ",
     "assert(",
     "pytest",
     "test.sh",
     "unittest",
-    "hidden test",
-    "参考答案",
 )
+RUBRIC_DIMS = (
+    "correctness",
+    "code_quality",
+    "reasoning",
+    "tool_usage",
+    "efficiency",
+)
+MIN_ASSISTANT_TURNS = 20
 
 DISCLAIMER = (
-    "本检查只做**结构预检**（文件是否存在、字段是否齐全、结构是否合理），"
-    "**不查集合过题比例**，**不代表结算或最终合格**。"
-    "请自行核验：题量要求≥3；**每题千问均挂**；禁三模型全过、Opus≤60%、Opus−千问>20%、GLM≥1 道过等；"
-    "平台不代提供模型 API；"
-    "每模型轨迹须含 session/ + cc-gateway-log/；"
+    "本检查对齐 3bench **平台 packagecheck 可静态机检项**"
+    "（结构 / 轮次 / scores·rubric / reports·eval_pass / 众单题过题门槛 / call-level 在 §B），"
+    "**不跑 Docker/GT 真测**，**不查集合过题比例**，不代表结算或终审。"
+    "请自行核验：题量≥3、集合比例；Docker Baseline FAIL+GT PASS。"
+    "平台更严：每模型 assistant 轮次各自 ≥20（非三模型平均）。"
+    "FAIL/WARN 项含「问题 + 修改建议」（与平台预审反馈同形）。"
     "**最终以甲方实际审核为准**。"
 )
+
+# 平台 SoftWarningDisplay：message + 建议：suggestion。code 默认改法（显式 suggestion 优先）。
+CODE_SUGGESTIONS: dict[str, str] = {
+    "DOCKER_IMAGE_PIN": (
+        "将 Dockerfile 的 FROM 改为固定 tag（如 ubuntu:24.04）或 @sha256:…；禁止 :latest 与无 tag。"
+    ),
+    "DOCKER_PIP_PIN": (
+        "pip install 写 pkg==x.y.z；若用 -r requirements.txt，打开该文件把每一行包名钉版"
+        "（禁裸包名）；缺失的 -r 文件放回 environment/ 构建上下文。"
+    ),
+    "DOCKER_NPM_PIN": "npm 写 pkg@x.y.z（或 package-lock 中已锁版本的确定性安装）。",
+    "DIR_NAME": "包目录名仅允许字母数字 . _ -（例：my_task_01）。",
+    "META_TASK_ID_MISMATCH": "将 zip/包顶层文件夹改名为 meta.task_id，或改 meta.task_id 与目录同名。",
+    "META_TASK_ID": "在 meta.json 填写 task_id（与顶层目录名一致）。",
+    "META_RUBRIC_TYPE": "rubric_task_type 四选一：code_generation / bug_fix / code_qa / refactor。",
+    "META_LANG": "meta.labels.code_lang 填语言（与 Taxonomy 一致）。",
+    "META_APP": "meta.labels.application 填应用领域标签。",
+    "META_ONELINER": "补 one_liner 或 one_sentence_summary。",
+    "META_DIFF": "补 difficulty / annotator_background 等难度字段。",
+    "META_AGREE": "补根级 agreement_score。",
+    "META_TAGS": "tags 写成非空数组。",
+    "META_JSON": "修正 meta.json 为合法 JSON 对象。",
+    "README": "在包根补 README.md（题意/环境简述）。",
+    "INSTRUCTION": "补 instruction.md（三模型同一份题面）。",
+    "TASK_TOML": "补 task.toml（勿写真实密钥）。",
+    "DOCKERFILE": "补 environment/Dockerfile。",
+    "WORKSPACE": "补 environment/workspace/ 完整 Baseline。",
+    "TEST_SH": "补 tests/test.sh（须能真实判分，禁 exit 0 空壳）。",
+    "TEST_SH_EMPTY": "在 test.sh 写真实 pytest/脚本断言，禁止空文件或仅注释。",
+    "TEST_SH_SHELL": "删掉恒通过的 exit 0/true，改成会真实 FAIL/PASS 的验收命令。",
+    "TEST_SH_THIN": "增加实质断言/用例行，避免敷衍判分。",
+    "GT": "提供 ground_truth/ 文件树和/或 solution/solve.sh，使套 GT 后 test 全过。",
+    "GLOBAL_RUBRIC": "补 rubrics/global_rubric.yaml。",
+    "TASK_RUBRIC": "补 rubrics/task_rubric.yaml。",
+    "TASK_TYPE": "task_rubric.task_type 四选一，与 meta 一致。",
+    "CRITERIA": "补 task_specific_criteria，五维均非空数组。",
+    "SCORES_FILE": "补 scores/rubric_scores.json：三模型 eval_pass + 五维 1–5 + agreement_score。",
+    "SCORES_JSON": "修正 scores/rubric_scores.json JSON 语法。",
+    "SCORES_MODELS": "scores 根下增加 models 对象，放入三模型评分。",
+    "REPORTS_ROOT": "包内建 reports/<模型>/…/eval_result.json（含 eval_pass）。",
+    "ALL_MODELS_PASS": "收紧测试或提高题难，使至少一模型挂；禁三模全过本题。",
+    "QWEN_MUST_FAIL": "确保千问本题 eval_pass=false（调测至千问不过）。",
+    "BYPASS_SESSIONS": "删除 multi-sessions 等旁路目录；正式只交 trajectories 下 1 条/模型。",
+    "WS_DIRTY": "从 workspace 删除 node_modules/__pycache__/.venv/.git/ground_truth 等后重新打包。",
+    "WS_THIN": "确认 workspace 是完整工程 Baseline（源码+配置+验收测），非空壳。",
+    "PKG_SECRET": "删除真实密钥/token，Dockerfile/workspace 内仅用占位符。",
+    "INSTRUCTION_LEAK": "题面去掉 ground_truth/参考答案/hidden test 等泄答案表述。",
+    "INSTRUCTION_LEAK_SOFT": "检查题面是否泄露测试断言原文；改成任务目标与完成标准描述。",
+    "INSTRUCTION_SECRET": "instruction 去掉真实 API Key/token。",
+    "INSTRUCTION_SHORT": "写清目标、完成标准与约束，使 Agent 可执行。",
+    "TOML_SECRET": "task.toml 禁止硬编码密钥；改用本机环境变量。",
+    "TRAJ_ROOT": "建 trajectories/<claude-opus-4-8|qwen-3.7-max|glm-5.2>/。",
+    "MANIFEST": "建议补 manifest.json（阶段/已采模型）；非硬失败。",
+    "CORR_ALIGN": "task_rubric.correctness 要点写明与 test.sh/reward/判题的关系。",
+    "LAYOUT_PACKAGE": "解压后应有 instruction.md + tests/test.sh 的任务包根。",
+    "LAYOUT_SESSIONS": "不要旁路 multi-sessions；轨迹只放 trajectories/<模型>/session 与 cc-gateway-log。",
+}
+
+# code 前缀 → 建议（更具体的 code 优先精确表）
+PREFIX_SUGGESTIONS: list[tuple[str, str]] = [
+    ("CRIT_", "在 task_rubric.yaml 的 task_specific_criteria 下补该维度非空要点数组。"),
+    ("SCORE_", "scores.models.<模型>.scores 该维分值改为 1–5 数字。"),
+    ("SCORES_MODEL_", "scores.models 补全该模型条目（含 eval_pass/scores/agreement_score）。"),
+    ("SCORES_EVAL_PASS_", "为该模型补 bool 类型 eval_pass（与 reports 实测一致）。"),
+    ("SCORES_MAP_", "该模型下增加 scores 对象，含五维 1–5 分。"),
+    ("CORR_VS_PASS_", "eval_pass=true 时 correctness 至少 4，test 全过通常改 5。"),
+    ("CORR_VS_FAIL_", "eval_pass=false 时 correctness 不得为 5，按漏测严重程度改 1–3。"),
+    (
+        "CORR_SOFT_TENSION_",
+        "挂题却 correctness=4：降到 1–3，并在 dimension_notes 写清测挂原因。",
+    ),
+    (
+        "CORR_PASS_NOT_5_",
+        "若 test 全过将 correctness 改为 5；有意扣分则在 notes 说明依据。",
+    ),
+    (
+        "RUBRIC_AI_DRAFTED",
+        "人工复核五维分后将 agreement_score_status/review_status 改为 complete，补 human_review。",
+    ),
+    ("AGREE_", "该模型补 agreement_score（评分一致性）。"),
+    ("EVAL_MISMATCH_", "对齐 reports 与 scores 的 eval_pass，以实测 test 结果为准。"),
+    ("REPORTS_EVAL_", "在 reports/<模型>/ 下落 eval_result.json，解析得 bool eval_pass。"),
+    ("TURNS_", "主会话 type=assistant 去重条数须 ≥20；继续对话有效执行后再交。"),
+    ("SESSION_COUNT_", "session/ 仅保留 1 条主 .jsonl；subagent 放到 session/subagents/。"),
+    ("SESSION_DIR_", "建 trajectories/<模型>/session/ 并放入 session.jsonl。"),
+    ("SESSION_EMPTY_", "放入主会话 session.jsonl（Claude Code 导出）。"),
+    ("SESSION_", "确认模型 session 路径与主 jsonl 齐全。"),
+    ("GW_EMPTY_", "把本场 cc-gateway 抓包 *.json 放进 cc-gateway-log/。"),
+    ("GW_DIR_", "建 trajectories/<模型>/cc-gateway-log/ 并放入至少 1 个 *.json。"),
+    ("TRAJ_", "补全 trajectories 下 opus/qwen/glm 三模型目录。"),
+    ("TOML_", "修正或清理 task.toml。"),
+]
+
+
+def suggestion_for_code(code: str) -> str:
+    c = (code or "").strip()
+    if not c:
+        return ""
+    if c in CODE_SUGGESTIONS:
+        return CODE_SUGGESTIONS[c]
+    for prefix, sug in PREFIX_SUGGESTIONS:
+        if c.startswith(prefix):
+            return sug
+    return ""
+
+
+def finding_display(message: str, suggestion: str = "") -> str:
+    """Align platform SoftWarningDisplay: 问题 + 建议：修改建议。"""
+    msg = (message or "").strip()
+    sug = (suggestion or "").strip()
+    if not msg:
+        return sug
+    if not sug:
+        return msg
+    if "建议：" in msg or "建议:" in msg:
+        return msg
+    return f"{msg} 建议：{sug}"
 
 
 @dataclass
@@ -82,6 +211,10 @@ class Finding:
     level: str  # PASS | WARN | FAIL
     code: str
     message: str
+    suggestion: str = ""  # 可选：如何修改（对齐平台 Finding.Suggestion）
+
+    def display(self) -> str:
+        return finding_display(self.message, self.suggestion)
 
 
 @dataclass
@@ -101,10 +234,24 @@ class Report:
     package_dir: str = ""
     sessions_dir: str = ""
 
-    def add(self, level: str, code: str, message: str) -> None:
-        self.findings.append(Finding(level=level, code=code, message=message))
+    def add(
+        self,
+        level: str,
+        code: str,
+        message: str,
+        suggestion: str = "",
+    ) -> None:
+        sug = (suggestion or "").strip()
+        if not sug and level in ("FAIL", "WARN"):
+            sug = suggestion_for_code(code)
+        self.findings.append(
+            Finding(level=level, code=code, message=message, suggestion=sug)
+        )
 
     def finalize(self) -> None:
+        # FAIL → WARN → PASS，方便人读（对齐平台 SortFindings）
+        rank = {"FAIL": 0, "WARN": 1, "PASS": 2}
+        self.findings.sort(key=lambda f: rank.get(f.level, 9))
         counts = {"PASS": 0, "WARN": 0, "FAIL": 0}
         for f in self.findings:
             counts[f.level] = counts.get(f.level, 0) + 1
@@ -115,6 +262,10 @@ class Report:
             self.verdict = "PRECHECK_WARN"
         else:
             self.verdict = "PRECHECK_PASS"
+
+    def soft_warnings(self) -> list[Finding]:
+        """潜在疑点：WARN 项（不单独当「硬挂」；但可导致 PRECHECK_WARN）。"""
+        return [f for f in self.findings if f.level == "WARN"]
 
 
 def _pick_named_subdir(root: Path, names: tuple[str, ...]) -> Path | None:
@@ -246,9 +397,9 @@ def check_core_files(package: Path, report: Report) -> None:
             )
         # 其它可选：缺则不打 WARN，避免几乎无法 PRECHECK_PASS
 
-    root = package.parent
-    if (package / "reports").is_dir() or (root / "reports").is_dir():
-        report.add("PASS", "REPORTS", "存在 reports/（package 内或根下）")
+    if (package / "reports").is_dir():
+        report.add("PASS", "REPORTS", "存在 reports/")
+    # 不接受包外/父目录 reports/：平台 only 看 package/reports（硬检在 check_reports_eval）
 
     gt = package / "ground_truth"
     solve = package / "solution" / "solve.sh"
@@ -265,77 +416,306 @@ def _read_text_capped(path: Path, limit: int = 256_000) -> str:
         return ""
 
 
-def _dockerfile_image_unpinned(image_ref: str) -> str | None:
-    """Return fail reason if image ref is unpinned; None if OK."""
+def _join_dockerfile_continuations(body: str) -> str:
+    """Join lines ending with \\ so multi-line RUN install is one line for scanning."""
+    out: list[str] = []
+    buf = ""
+    for line in body.splitlines():
+        s = line.rstrip()
+        if s.endswith("\\"):
+            buf += s[:-1] + " "
+        else:
+            buf += s
+            out.append(buf)
+            buf = ""
+    if buf:
+        out.append(buf)
+    return "\n".join(out)
+
+
+def _dockerfile_image_unpinned(image_ref: str, known_stages: set[str] | None = None) -> str | None:
+    """Return fail reason if image ref is unpinned; None if OK. Align platform dockerfile_pin.go."""
     ref = image_ref.strip().strip("'\"")
     if not ref or ref.upper() == "SCRATCH":
         return None
-    # multi-stage: "name AS alias" already stripped to img by regex; may still have AS
+    if "$" in ref:
+        return None  # build ARG，结构阶段无法强制
     ref = re.split(r"\s+", ref, maxsplit=1)[0]
     lower = ref.lower()
-    if lower.endswith(":latest") or lower.endswith("@latest"):
-        return f"使用 :latest：`{ref}`"
-    # digest form registry/path@sha256:...
-    if "@sha256:" in lower or re.search(r"@sha[0-9]+:", lower):
+    if "@sha256:" in lower:
+        # digest 已固定；仍禁止 name:latest@sha256:…
+        name = ref.split("@", 1)[0]
+        last = name.rsplit("/", 1)[-1]
+        if ":" in last and last.rsplit(":", 1)[-1].lower() == "latest":
+            return f"使用 :latest：`{ref}`"
         return None
-    # tagged: last path segment after last / must contain :tag (not only registry host:port)
-    # Heuristic: has ":" after last "/" → tagged (port in host:5000/img is before last /)
+    # multi-stage：引用前面 AS 的 stage 名
+    if known_stages and "/" not in ref and ":" not in ref and ref.lower() in known_stages:
+        return None
     last = ref.rsplit("/", 1)[-1]
     if ":" in last:
         tag = last.rsplit(":", 1)[-1]
         if tag.lower() == "latest":
             return f"使用 :latest：`{ref}`"
+        if not tag:
+            return f"镜像 tag 为空：`{ref}`"
         return None
     return f"base 镜像未固定 tag/digest：`{ref}`（禁止隐式 latest）"
 
 
-def _dockerfile_unpinned_pip_tokens(body: str) -> list[str]:
-    """Heuristic: bare `pip install pkg` without version constraint → tokens to WARN."""
-    warns: list[str] = []
-    for m in re.finditer(r"\bpip(?:3)?\s+install\b([^\n\\]*)", body, re.IGNORECASE):
-        rest = m.group(1)
-        if re.search(r"(^|\s)-r\s", rest):
+def _pip_token_unpinned_name(tok: str) -> str | None:
+    """Return package name if token is a bare PyPI-like ref without version pin."""
+    tok = tok.strip().strip("'\"")
+    if not tok or tok.startswith("-"):
+        return None
+    if tok.startswith("http://") or tok.startswith("https://") or tok.startswith("git+"):
+        return None
+    # local path / requirement file
+    if tok.endswith(".txt") or tok.endswith(".in") or "/" in tok or "\\" in tok:
+        return None
+    if re.search(r"==|@|>=|<=|~=|!=|>|<", tok):
+        return None
+    name = tok
+    if "[" in name:
+        name = name.split("[", 1)[0]
+    name = name.strip()
+    if not name or name in (".", "..") or name.startswith("."):
+        return None
+    return name
+
+
+def _pip_req_file_refs(body: str) -> list[str]:
+    """Collect -r / --requirement paths from pip install lines."""
+    refs: list[str] = []
+    flat = _join_dockerfile_continuations(body)
+    for m in re.finditer(r"\bpip(?:3)?\s+install\b([^\n]*)", flat, re.IGNORECASE):
+        tokens = m.group(1).split()
+        i = 0
+        while i < len(tokens):
+            t = tokens[i]
+            if t in ("-r", "--requirement") and i + 1 < len(tokens):
+                refs.append(tokens[i + 1].strip("'\""))
+                i += 2
+                continue
+            if t.startswith("-r=") or t.startswith("--requirement="):
+                refs.append(t.split("=", 1)[1].strip("'\""))
+            i += 1
+    return refs
+
+
+def _resolve_req_file(dockerfile: Path, package: Path, ref: str) -> Path | None:
+    """Resolve -r path relative to Dockerfile dir, then package/environment, then basename search."""
+    ref = (ref or "").strip().strip("'\"")
+    if not ref or ref.startswith("http://") or ref.startswith("https://"):
+        return None
+    # container absolute → use basename under docker build context candidates
+    pure = Path(ref)
+    name = pure.name
+    candidates: list[Path] = []
+    base = dockerfile.parent
+    if not pure.is_absolute() and not ref.startswith("/"):
+        candidates.append((base / pure).resolve())
+        candidates.append((base / name).resolve())
+    else:
+        # /app/requirements.txt → try sibling paths
+        candidates.append((base / name).resolve())
+        # strip common container prefixes: /app, /workspace, /src
+        parts = [p for p in pure.parts if p not in ("/", "app", "workspace", "src", "code")]
+        if parts:
+            candidates.append((base / Path(*parts)).resolve())
+            if len(parts) >= 2:
+                candidates.append((package / "environment" / Path(*parts[-2:])).resolve())
+    candidates.append((package / "environment" / name).resolve())
+    candidates.append((package / "environment" / "workspace" / name).resolve())
+    # under environment/ (shallow)
+    env = package / "environment"
+    if env.is_dir():
+        for p in env.rglob(name):
+            if p.is_file() and p.name == name:
+                candidates.append(p.resolve())
+                if len(candidates) > 40:
+                    break
+    seen: set[Path] = set()
+    for c in candidates:
+        if c in seen:
             continue
-        if re.search(r"(^|\s)-e\s", rest) or "requirements" in rest.lower():
+        seen.add(c)
+        try:
+            if c.is_file():
+                # must stay inside package (read-only scan of user package)
+                c.relative_to(package.resolve())
+                return c
+        except (OSError, ValueError):
+            continue
+    return None
+
+
+def _requirements_file_unpinned(
+    req_path: Path, *, depth: int = 0, max_depth: int = 4
+) -> list[str]:
+    """Parse pip requirements file; return labels 'file:pkg' for unpinned names."""
+    if depth > max_depth or not req_path.is_file():
+        return []
+    hits: list[str] = []
+    try:
+        text = req_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return [f"{req_path.name}:<unreadable>"]
+    try:
+        rel_hint = req_path.name
+    except Exception:
+        rel_hint = str(req_path)
+    for raw in text.splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if not line:
+            continue
+        # nested -r
+        nested_ref: str | None = None
+        if line.startswith("-r ") or line.startswith("--requirement "):
+            nested_ref = line.split(None, 1)[1].strip().strip("'\"")
+        elif line.startswith("-r=") or line.startswith("--requirement="):
+            nested_ref = line.split("=", 1)[1].strip().strip("'\"")
+        if nested_ref:
+            nested = req_path.parent / nested_ref
+            if nested.is_file():
+                hits.extend(_requirements_file_unpinned(nested, depth=depth + 1, max_depth=max_depth))
+            else:
+                hits.append(f"{rel_hint}:-r {nested_ref}(missing)")
+            continue
+        if line.startswith("-"):
+            continue  # other pip flags / options
+        # VCS / URL / local path
+        if line.startswith(("http://", "https://", "git+", "svn+", "hg+", "file:")):
+            continue
+        # strip env markers: pkg==1.0 ; python_version>="3"
+        if ";" in line:
+            line = line.split(";", 1)[0].strip()
+        name = _pip_token_unpinned_name(line)
+        if name:
+            hits.append(f"{rel_hint}:{name}")
+    return hits
+
+
+def _pip_install_unpinned(body: str) -> list[str]:
+    """Bare pip package names on install CLI without ==/@/version pin."""
+    hits: list[str] = []
+    seen: set[str] = set()
+    flat = _join_dockerfile_continuations(body)
+    for m in re.finditer(r"\bpip(?:3)?\s+install\b([^\n]*)", flat, re.IGNORECASE):
+        rest = m.group(1)
+        # still walk tokens; -r file handled separately with path resolution
+        tokens = rest.split()
+        i = 0
+        while i < len(tokens):
+            t = tokens[i]
+            if t in ("-r", "--requirement"):
+                i += 2  # skip file arg
+                continue
+            if t.startswith("-r=") or t.startswith("--requirement="):
+                i += 1
+                continue
+            if t.startswith("-"):
+                i += 1
+                continue
+            name = _pip_token_unpinned_name(t)
+            if name and name not in seen:
+                seen.add(name)
+                hits.append(name)
+            i += 1
+    return hits
+
+
+def _pip_pin_failures(dockerfile: Path, package: Path, body: str) -> list[str]:
+    """CLI bare packages + requirements.txt contents referenced by -r."""
+    hits = list(_pip_install_unpinned(body))
+    seen = set(hits)
+    for ref in _pip_req_file_refs(body):
+        resolved = _resolve_req_file(dockerfile, package, ref)
+        if resolved is None:
+            label = f"-r {ref}(文件未找到)"
+            if label not in seen:
+                seen.add(label)
+                hits.append(label)
+            continue
+        for h in _requirements_file_unpinned(resolved):
+            if h not in seen:
+                seen.add(h)
+                hits.append(h)
+    return hits
+
+
+def _npm_install_unpinned(body: str) -> list[str]:
+    """npm install/i/add bare package without @version."""
+    hits: list[str] = []
+    seen: set[str] = set()
+    flat = _join_dockerfile_continuations(body)
+    for m in re.finditer(r"\bnpm\s+(?:install|i|add)\b([^\n]*)", flat, re.IGNORECASE):
+        rest = m.group(1)
+        if re.search(r"(^|\s)-g\s*$", rest) or rest.strip() in ("", "-g"):
+            # npm install -g with no pkg or package.json only
             continue
         for tok in rest.split():
-            if tok.startswith("-") or tok.startswith("http://") or tok.startswith("https://"):
+            if tok.startswith("-"):
                 continue
-            # keep package-like names
-            if re.search(r"==|>=|<=|~=|!=|@|>|<", tok):
+            if tok.startswith("http://") or tok.startswith("https://"):
                 continue
-            clean = tok.strip("'\"")
-            if not clean or clean in (".", "..") or clean.startswith("."):
+            if tok in (".", "..") or tok.startswith("file:"):
                 continue
-            # -i index URL leftover, common mirror flags already skipped via -
-            if "/" in clean and not clean.startswith("git+"):
+            # scoped @scope/pkg without version still unpinned unless @version after pkg
+            # good: @scope/pkg@1.2.3  or  foo@1.2.3
+            if re.search(r"@\d", tok) or re.search(r"@[\w.-]+\d", tok):
+                # has version-ish @ver at end (foo@1.0.0 or @s/p@1.0.0)
+                if re.match(r"@[^/]+/[^@]+@.+", tok) or (not tok.startswith("@") and "@" in tok[1:]):
+                    continue
+                if tok.startswith("@") and tok.count("@") >= 2:
+                    continue
+            if not tok.startswith("@") and "@" in tok:
+                continue  # name@version
+            if tok.startswith("@") and tok.count("@") >= 2:
                 continue
-            warns.append(clean)
-    return warns
+            name = tok.strip("'\"")
+            if name not in seen:
+                seen.add(name)
+                hits.append(name)
+    return hits
 
 
-def check_dockerfile_pins(package: Path, report: Report) -> None:
-    """甲方：依赖须固定版本；禁止 Docker 镜像/包用 latest。"""
-    path = package / "environment" / "Dockerfile"
-    if not path.is_file():
-        return
+def _check_one_dockerfile(path: Path, package: Path, report: Report) -> None:
+    """检查单个 Dockerfile：FROM 钉 tag；pip/npm 须固定版本；禁止 latest。"""
+    try:
+        rel = path.relative_to(package).as_posix()
+    except ValueError:
+        rel = str(path)
     text = path.read_text(encoding="utf-8", errors="replace")
     lines_no_comment: list[str] = []
     for line in text.splitlines():
         lines_no_comment.append(line.split("#", 1)[0])
     body = "\n".join(lines_no_comment)
+    flat = _join_dockerfile_continuations(body)
 
     fail_hits: list[str] = []
-    for m in FROM_LINE_RE.finditer(body):
-        reason = _dockerfile_image_unpinned(m.group("img"))
+    known_stages: set[str] = set()
+    from_full = re.compile(
+        r"^\s*FROM\s+(?:--\S+\s+)*(?P<img>\S+)(?P<rest>.*)$",
+        re.IGNORECASE | re.MULTILINE,
+    )
+    has_from = False
+    for m in from_full.finditer(flat):
+        has_from = True
+        rest = m.group("rest") or ""
+        as_m = re.search(r"(?i)\bAS\s+(\S+)", rest)
+        if as_m:
+            known_stages.add(as_m.group(1).lower())
+        reason = _dockerfile_image_unpinned(m.group("img"), known_stages)
         if reason:
             fail_hits.append(f"FROM：{reason}")
+    if not has_from:
+        fail_hits.append("未找到 FROM 行")
 
     for i, raw in enumerate(text.splitlines(), start=1):
         code = raw.split("#", 1)[0]
         if not EXPLICIT_LATEST_RE.search(code):
             continue
-        # FROM 行已由 base 镜像规则覆盖
         if re.match(r"^\s*FROM\b", code, re.IGNORECASE):
             continue
         fail_hits.append(f"L{i}: 禁止使用 latest（`{raw.strip()[:80]}`）")
@@ -351,33 +731,64 @@ def check_dockerfile_pins(package: Path, report: Report) -> None:
         for h in uniq[:8]:
             report.add(
                 "FAIL",
-                "DOCKER_UNPINNED",
-                f"Dockerfile 依赖未钉死版本：{h}。须固定 tag/digest（如 ubuntu:24.04），禁止 latest",
+                "DOCKER_IMAGE_PIN",
+                f"{rel}：依赖未钉死版本：{h}。须固定 tag/digest（如 ubuntu:24.04），禁止 latest"
+                f"（甲方：Dockerfile 依赖固定版本；对齐平台）",
             )
         if len(uniq) > 8:
-            report.add(
-                "FAIL",
-                "DOCKER_UNPINNED_MORE",
-                f"另有 {len(uniq) - 8} 处未钉版本（略）",
-            )
+            report.add("FAIL", "DOCKER_IMAGE_PIN", f"{rel}：另有 {len(uniq) - 8} 处镜像未钉版本")
     else:
         report.add(
             "PASS",
-            "DOCKER_PIN",
-            "Dockerfile base 镜像未见 :latest / 无 tag；符合固定版本要求（静态规则）",
+            "DOCKER_IMAGE_PIN",
+            f"{rel}：FROM 镜像已固定 tag/digest（禁止 latest）",
         )
 
-    pip_warns = _dockerfile_unpinned_pip_tokens(body)
-    if pip_warns:
-        shown = ", ".join(pip_warns[:6])
-        more = f" 等共 {len(pip_warns)} 项" if len(pip_warns) > 6 else ""
+    pip_bad = _pip_pin_failures(path, package, body)
+    if pip_bad:
+        shown = ", ".join(pip_bad[:8])
+        more = f" 等共 {len(pip_bad)} 项" if len(pip_bad) > 8 else ""
         report.add(
-            "WARN",
-            "DOCKER_PIP_UNPINNED",
-            f"Dockerfile 中 pip install 疑似未钉版本：{shown}{more}（甲方要求依赖固定版本，建议 pkg==x.y.z）",
+            "FAIL",
+            "DOCKER_PIP_PIN",
+            f"{rel}：pip 未钉版本：{shown}{more}"
+            f"（须 pkg==x.y.z；含 -r requirements 文件内依赖；甲方固定版本）",
         )
     else:
-        report.add("PASS", "DOCKER_PIP_PIN", "Dockerfile 未见明显未钉版本的 pip install 包名")
+        report.add(
+            "PASS",
+            "DOCKER_PIP_PIN",
+            f"{rel}：pip install / -r requirements 未见未钉版本包名",
+        )
+
+    npm_bad = _npm_install_unpinned(body)
+    if npm_bad:
+        shown = ", ".join(npm_bad[:6])
+        more = f" 等共 {len(npm_bad)} 项" if len(npm_bad) > 6 else ""
+        report.add(
+            "FAIL",
+            "DOCKER_NPM_PIN",
+            f"{rel}：npm install 未钉版本：{shown}{more}（须 pkg@x.y.z；甲方依赖固定版本）",
+        )
+    else:
+        # 多数包无 npm，静默 PASS 过噪；仅有 npm 装包行才 PASS
+        if re.search(r"\bnpm\s+(?:install|i|add)\b", body, re.I):
+            report.add("PASS", "DOCKER_NPM_PIN", f"{rel}：未见未钉版本的 npm install 包名")
+
+
+def check_dockerfile_pins(package: Path, report: Report) -> None:
+    """甲方：依赖须固定版本；禁止 Docker 镜像/包用 latest。对齐平台 dockerfile_pin.go。"""
+    paths = [
+        package / "environment" / "Dockerfile",
+        package / "environment" / "workspace" / "Dockerfile",
+    ]
+    any_checked = False
+    for path in paths:
+        if path.is_file():
+            any_checked = True
+            _check_one_dockerfile(path, package, report)
+    if not any_checked:
+        return  # 缺失路径由 check_core_files 报 DOCKERFILE
 
 
 def check_test_sh(package: Path, report: Report) -> None:
@@ -482,17 +893,23 @@ def check_instruction(package: Path, report: Report) -> None:
     else:
         report.add("PASS", "INSTRUCTION_LEN", "instruction.md 有实质内容")
     low = text.lower()
-    leak_hits = [term for term in INSTRUCTION_LEAK_TERMS if term in low]
-    if leak_hits:
+    hard_hit = next((t for t in INSTRUCTION_LEAK_HARD if t.lower() in low), None)
+    if hard_hit:
         report.add(
-            "WARN",
+            "FAIL",
             "INSTRUCTION_LEAK",
-            "instruction.md 可能提及敏感词「"
-            + "」「".join(leak_hits[:4])
-            + "」，请确认未泄测试断言 / 答案路径",
+            f"instruction.md 不得提及「{hard_hit}」（平台/甲方：泄答案路径或隐藏测）",
         )
     else:
-        report.add("PASS", "INSTRUCTION_LEAK", "instruction.md 未见明显泄题关键词")
+        soft_hit = next((t for t in INSTRUCTION_LEAK_SOFT if t.lower() in low), None)
+        if soft_hit:
+            report.add(
+                "WARN",
+                "INSTRUCTION_LEAK_SOFT",
+                f"instruction.md 提及「{soft_hit}」，请确认未泄测试断言原文",
+            )
+        else:
+            report.add("PASS", "INSTRUCTION_LEAK", "instruction.md 未见明显泄题关键词")
     if SECRET_RE.search(text) or SECRET_EXTRA_RE.search(text):
         report.add("FAIL", "INSTRUCTION_SECRET", "instruction.md 疑似含密钥/token")
 
@@ -524,12 +941,15 @@ def check_meta(root: Path, package: Path, report: Report) -> None:
     tid = meta.get("task_id")
     if tid:
         report.add("PASS", "META_TASK_ID", f"task_id = {tid}")
-        if str(tid) not in (root.name, package.name):
+        # 平台硬门槛：task_id 必须与任务目录名一致
+        if str(tid) != package.name:
             report.add(
-                "WARN",
+                "FAIL",
                 "META_TASK_ID_MISMATCH",
-                f"task_id「{tid}」建议与提交根目录名「{root.name}」一致",
+                f"task_id「{tid}」须与任务目录名「{package.name}」一致（平台 packagecheck / 甲方 §5）",
             )
+        else:
+            report.add("PASS", "META_TASK_ID_MATCH", f"task_id 与目录名一致：{tid}")
     else:
         report.add("FAIL", "META_TASK_ID", "缺少 task_id")
 
@@ -578,21 +998,370 @@ def check_meta(root: Path, package: Path, report: Report) -> None:
         report.add("FAIL", "META_TAGS", "缺少 tags（数组）")
 
 
+def _load_yaml_soft(path: Path) -> dict[str, Any] | None:
+    text = path.read_text(encoding="utf-8", errors="replace")
+    try:
+        import yaml  # type: ignore
+
+        data = yaml.safe_load(text)
+        return data if isinstance(data, dict) else None
+    except Exception:
+        return None
+
+
 def check_rubrics(package: Path, report: Report) -> None:
-    for rel, code in [
-        ("rubrics/global_rubric.yaml", "GLOBAL_RUBRIC_BODY"),
-        ("rubrics/task_rubric.yaml", "TASK_RUBRIC_BODY"),
-    ]:
-        path = package / rel
-        if not path.is_file():
-            continue
-        text = path.read_text(encoding="utf-8", errors="replace")
-        if len(text.strip()) < 80:
-            report.add("WARN", code, f"{rel} 内容过短")
-        elif "correctness" in text or "criteria" in text or "items:" in text:
-            report.add("PASS", code, f"{rel} 含评分相关内容")
+    """对齐平台 checkRubric：维度要点 + scores 正式文件。"""
+    global_p = package / "rubrics" / "global_rubric.yaml"
+    task_p = package / "rubrics" / "task_rubric.yaml"
+    if global_p.is_file():
+        report.add("PASS", "GLOBAL_RUBRIC_BODY", "存在 rubrics/global_rubric.yaml")
+    # 存在性已在 core_files 查
+    if not task_p.is_file():
+        return
+
+    doc = _load_yaml_soft(task_p)
+    text = task_p.read_text(encoding="utf-8", errors="replace")
+    if doc is None:
+        # 无 PyYAML 时用文本启发
+        if "task_type" not in text:
+            report.add("FAIL", "TASK_TYPE", "task_rubric 缺少 task_type")
         else:
-            report.add("WARN", code, f"{rel} 请确认各维度要点非空")
+            report.add("PASS", "TASK_RUBRIC_PARSE", "task_rubric.yaml 可读取（未装 PyYAML，维度细则请自查）")
+        for d in RUBRIC_DIMS:
+            if d not in text:
+                report.add("FAIL", f"CRIT_{d}", f"task_rubric 文本未见维度 {d}")
+    else:
+        tt = str(doc.get("task_type") or "").strip()
+        if tt in RUBRIC_TYPES:
+            report.add("PASS", "TASK_TYPE", f"task_type={tt}")
+        else:
+            report.add("FAIL", "TASK_TYPE", f"task_rubric.task_type 须为四选一，当前={tt!r}")
+        criteria = doc.get("task_specific_criteria")
+        if not isinstance(criteria, dict):
+            report.add("FAIL", "CRITERIA", "缺少 task_specific_criteria")
+        else:
+            for d in RUBRIC_DIMS:
+                v = criteria.get(d)
+                ok = isinstance(v, list) and len(v) > 0
+                if ok:
+                    report.add("PASS", f"CRIT_{d}", f"{d} 有 {len(v)} 条要点")
+                else:
+                    report.add(
+                        "FAIL",
+                        f"CRIT_{d}",
+                        f"{d} 的 task_specific_criteria 须为非空数组（平台 rubric FAIL）",
+                    )
+            corr = " ".join(str(x) for x in (criteria.get("correctness") or []))
+            low = corr.lower()
+            if any(k in low for k in ("test", "reward", "判题", "pytest", "通过")):
+                report.add("PASS", "CORR_ALIGN", "correctness 提及判题相关表述")
+            else:
+                report.add(
+                    "WARN",
+                    "CORR_ALIGN",
+                    "correctness 要点建议明确对齐 test.sh / reward / 判题通过",
+                )
+
+    check_rubric_scores(package, report)
+
+
+def check_rubric_scores(package: Path, report: Report) -> None:
+    """scores/rubric_scores.json：三模型 eval_pass + 五维 1–5 + agreement（平台硬）。"""
+    path = package / "scores" / "rubric_scores.json"
+    if not path.is_file():
+        report.add(
+            "FAIL",
+            "SCORES_FILE",
+            "缺少 scores/rubric_scores.json（平台 rubric 硬门槛；须交付正式评分结果）",
+        )
+        return
+    try:
+        root = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as e:
+        report.add("FAIL", "SCORES_JSON", f"scores/rubric_scores.json 非法 JSON：{e}")
+        return
+    if not isinstance(root, dict):
+        report.add("FAIL", "SCORES_JSON", "scores 根须为对象")
+        return
+    models_block = root.get("models")
+    if not isinstance(models_block, dict):
+        report.add("FAIL", "SCORES_MODELS", "scores 须含 models 对象")
+        return
+
+    need = [
+        ("claude-opus-4.8", ("claude-opus-4-8", "claude-opus-4.8")),
+        ("qwen-3.7-max", ("qwen-3.7-max",)),
+        ("glm-5.2", ("glm-5.2",)),
+    ]
+    eval_map: dict[str, bool | None] = {}
+    scores_ok = True
+    for label, keys in need:
+        mm = None
+        key_hit = ""
+        for k in keys:
+            if isinstance(models_block.get(k), dict):
+                mm = models_block[k]
+                key_hit = k
+                break
+        if mm is None:
+            scores_ok = False
+            report.add("FAIL", f"SCORES_MODEL_{label}", f"scores.models 缺少 {label}")
+            eval_map[label] = None
+            continue
+        ep = mm.get("eval_pass")
+        if not isinstance(ep, bool):
+            scores_ok = False
+            report.add("FAIL", f"SCORES_EVAL_PASS_{label}", f"{key_hit} 须含 bool eval_pass")
+            eval_map[label] = None
+        else:
+            eval_map[label] = ep
+        scores = mm.get("scores")
+        if not isinstance(scores, dict):
+            scores_ok = False
+            report.add("FAIL", f"SCORES_MAP_{label}", f"{key_hit} 须含 scores 对象")
+        else:
+            for d in RUBRIC_DIMS:
+                sv = scores.get(d)
+                try:
+                    f = float(sv)
+                except (TypeError, ValueError):
+                    f = -1
+                if f < 1 or f > 5:
+                    scores_ok = False
+                    report.add(
+                        "FAIL",
+                        f"SCORE_{key_hit}_{d}",
+                        f"分值须在 1–5: {key_hit}.{d}={sv!r}",
+                    )
+            # correctness vs eval_pass
+            try:
+                cf = float(scores.get("correctness"))
+            except (TypeError, ValueError):
+                cf = None
+            if isinstance(ep, bool) and cf is not None:
+                if ep and cf < 4:
+                    scores_ok = False
+                    report.add(
+                        "FAIL",
+                        f"CORR_VS_PASS_{key_hit}",
+                        f"{key_hit}：eval_pass=true 时 correctness 应 ≥4",
+                        suggestion=(
+                            "将 scores.models 与 reports/**/rubric_scores.json 中该模型 "
+                            "scores.correctness 改为 ≥4（test 全过通常为 5）。"
+                        ),
+                    )
+                if not ep and cf >= 5:
+                    scores_ok = False
+                    report.add(
+                        "FAIL",
+                        f"CORR_VS_FAIL_{key_hit}",
+                        f"{key_hit}：eval_pass=false 时 correctness 不得为 5",
+                        suggestion=(
+                            "挂题不得 correctness=5：按漏测严重程度改为 1–3，"
+                            "并在 dimension_notes.correctness 说明测挂点。"
+                        ),
+                    )
+                # Soft WARN（对齐平台 rubric soft）：不硬失败
+                if not ep and 4 <= cf < 5:
+                    report.add(
+                        "WARN",
+                        f"CORR_SOFT_TENSION_{key_hit}",
+                        f"{key_hit}：eval_pass=false（机测未过）但 correctness={cf:g}，"
+                        f"分偏高（挂题 correctness 通常 1–3；=5 才硬失败）",
+                        suggestion=(
+                            "改 scores/rubric_scores.json 与 reports/**/rubric_scores.json 中该模型 "
+                            "scores.correctness，按漏测严重程度降到 1–3，并在 dimension_notes.correctness "
+                            "写清：哪些 acceptance 通过、哪些 hidden/test.sh 挂、reward=0。"
+                        ),
+                    )
+                if ep and 4 <= cf < 5:
+                    report.add(
+                        "WARN",
+                        f"CORR_PASS_NOT_5_{key_hit}",
+                        f"{key_hit}：eval_pass=true 但 correctness={cf:g}"
+                        f"（test 全过时甲方通常要求 correctness=5）",
+                        suggestion=(
+                            "若 test.sh 确实全过，将 correctness 改为 5；若有意扣分，"
+                            "在 notes 说明「exec 过但 rubric 另有缺口」及依据。"
+                        ),
+                    )
+        if "agreement_score" not in mm:
+            scores_ok = False
+            report.add("FAIL", f"AGREE_{key_hit}", f"{key_hit} 须含 agreement_score")
+        # Soft：AI 草拟分
+        if _model_ai_drafted(mm):
+            report.add(
+                "WARN",
+                f"RUBRIC_AI_DRAFTED_{key_hit}",
+                f"{key_hit}：评分仍为 AI 草拟（agreement_score_status/review_status=ai_drafted），"
+                f"尚未按人审终稿落盘",
+                suggestion=(
+                    "人工对照轨迹与 eval_result 复核五维分后：将 models 内及根级 "
+                    "agreement_score_status、review_status 改为 complete；补 human_review / "
+                    "reviewed_at；并同步 reports/**/rubric_scores.json。"
+                ),
+            )
+    if _root_ai_drafted(root) and not any(
+        f.code.startswith("RUBRIC_AI_DRAFTED_") for f in report.findings
+    ):
+        report.add(
+            "WARN",
+            "RUBRIC_AI_DRAFTED",
+            "scores/rubric_scores.json 根级 agreement_score_status/review_status=ai_drafted："
+            "当前为 AI 草拟分，不是人工终审完成态",
+            suggestion=(
+                "人工复核后改为 complete，补 human_review 说明与 reviewed_at；"
+                "确认 correctness 与各模型 eval_pass 一致后提交。"
+            ),
+        )
+    if scores_ok:
+        report.add(
+            "PASS",
+            "SCORES_FILE",
+            "scores/rubric_scores.json 三模型 eval_pass/五维分/agreement 可解析",
+        )
+
+    # 众包单题硬门槛（与平台 models_summary 对齐）
+    known = [v for v in eval_map.values() if isinstance(v, bool)]
+    if len(known) == 3 and all(known):
+        report.add(
+            "FAIL",
+            "ALL_MODELS_PASS",
+            "禁止三模型都测通（平台/甲方众包单题硬门槛；见 scores.eval_pass）",
+        )
+    if eval_map.get("qwen-3.7-max") is True:
+        report.add(
+            "FAIL",
+            "QWEN_MUST_FAIL",
+            "千问须在本题测不过（平台：每题千问过题率=0；scores 中 qwen eval_pass 须为 false）",
+        )
+
+
+def _status_looks_ai_drafted(v: Any) -> bool:
+    s = str(v or "").strip().lower()
+    if not s or s == "none":
+        return False
+    return s in ("ai_drafted", "ai-drafted", "draft", "drafted")
+
+
+def _model_ai_drafted(mm: dict[str, Any] | None) -> bool:
+    if not isinstance(mm, dict):
+        return False
+    return _status_looks_ai_drafted(mm.get("agreement_score_status")) or _status_looks_ai_drafted(
+        mm.get("review_status")
+    )
+
+
+def _root_ai_drafted(root: dict[str, Any] | None) -> bool:
+    if not isinstance(root, dict):
+        return False
+    return _status_looks_ai_drafted(root.get("agreement_score_status")) or _status_looks_ai_drafted(
+        root.get("review_status")
+    )
+
+
+def check_reports_eval(package: Path, report: Report) -> None:
+    """平台：三模型均须有 reports/<model>/**/eval_result.json 含 eval_pass。"""
+    traj_need = [
+        ("claude-opus-4.8", ("claude-opus-4-8", "claude-opus-4.8")),
+        ("qwen-3.7-max", ("qwen-3.7-max",)),
+        ("glm-5.2", ("glm-5.2",)),
+    ]
+    reports = package / "reports"
+    if not reports.is_dir():
+        report.add(
+            "FAIL",
+            "REPORTS_ROOT",
+            "缺少 reports/（平台须交付各模型 eval_result.json）",
+        )
+        return
+    report.add("PASS", "REPORTS_ROOT", "存在 reports/")
+
+    score_pass: dict[str, bool | None] = {}
+    sp = package / "scores" / "rubric_scores.json"
+    if sp.is_file():
+        try:
+            root = json.loads(sp.read_text(encoding="utf-8"))
+            mb = root.get("models") if isinstance(root, dict) else None
+            if isinstance(mb, dict):
+                for label, keys in traj_need:
+                    for k in keys:
+                        m = mb.get(k)
+                        if isinstance(m, dict) and isinstance(m.get("eval_pass"), bool):
+                            score_pass[label] = m["eval_pass"]
+                            break
+        except json.JSONDecodeError:
+            pass
+
+    for label, keys in traj_need:
+        hit_dir = None
+        for k in keys:
+            p = reports / k
+            if p.is_dir():
+                hit_dir = p
+                break
+        if hit_dir is None:
+            report.add(
+                "FAIL",
+                f"REPORTS_EVAL_{label}",
+                f"{label}：缺少 reports/<model>/（须含 eval_result.json）",
+            )
+            continue
+        eval_files = list(hit_dir.rglob("eval_result.json"))
+        if not eval_files:
+            report.add(
+                "FAIL",
+                f"REPORTS_EVAL_{label}",
+                f"{label}：reports 下未找到 eval_result.json（平台 hard）",
+            )
+            continue
+        ep = None
+        for ef in eval_files:
+            try:
+                data = json.loads(ef.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                continue
+            if isinstance(data, dict) and isinstance(data.get("eval_pass"), bool):
+                ep = data["eval_pass"]
+                break
+            # reward 1/0 兼容
+            if isinstance(data, dict) and "reward" in data:
+                try:
+                    ep = float(data["reward"]) >= 1.0
+                except (TypeError, ValueError):
+                    pass
+                if ep is not None:
+                    break
+        if ep is None:
+            report.add(
+                "FAIL",
+                f"REPORTS_EVAL_{label}",
+                f"{label}：eval_result.json 无法解析 bool eval_pass",
+            )
+            continue
+        report.add(
+            "PASS",
+            f"REPORTS_EVAL_{label}",
+            f"{hit_dir.name}: reports.eval_pass={ep}",
+        )
+        if label in score_pass and score_pass[label] is not None and score_pass[label] != ep:
+            report.add(
+                "FAIL",
+                f"EVAL_MISMATCH_{label}",
+                f"{label} reports.eval_pass={ep} 与 scores.eval_pass={score_pass[label]} 不一致",
+            )
+
+
+def check_bypass_sessions(package: Path, report: Report) -> None:
+    for name in SESSIONS_DIR_NAMES:
+        if (package / name).is_dir():
+            report.add(
+                "FAIL",
+                "BYPASS_SESSIONS",
+                f"禁止提交旁路目录 {name}/：每模型正式只交 1 条轨迹（trajectories/）",
+            )
+            return
+    report.add("PASS", "BYPASS_SESSIONS", "未见 multi-sessions 等旁路 session 目录")
 
 
 def check_workspace_clean(package: Path, report: Report) -> None:
@@ -634,6 +1403,38 @@ _AUX_TRAJ_JSONL = frozenset({"call_level.jsonl", "calls.jsonl"})
 
 SESSION_DIR_NAME = "session"
 GATEWAY_LOG_DIR_NAME = "cc-gateway-log"
+
+
+def count_assistant_turns(path: Path) -> int:
+    """Align platform quality.go: type=assistant, dedupe message.id / uuid."""
+    seen: set[str] = set()
+    count = 0
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return 0
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(row, dict) or row.get("type") != "assistant":
+            continue
+        msg = row.get("message")
+        mid = ""
+        if isinstance(msg, dict):
+            mid = str(msg.get("id") or "").strip()
+        if not mid:
+            mid = str(row.get("uuid") or "").strip()
+        if mid:
+            if mid in seen:
+                continue
+            seen.add(mid)
+        count += 1
+    return count
 
 
 def _find_sessions_in_dir(search_dir: Path) -> list[Path]:
@@ -755,30 +1556,20 @@ def check_model_sessions(sessions_root: Path, report: Report) -> None:
             "//", "/"
         )
         report.add("PASS", f"SESSION_{model}", f"主 session：{rel_main}")
-        try:
-            lines = main.read_text(encoding="utf-8", errors="replace").splitlines()
-        except OSError as e:
-            report.add("WARN", f"SESSION_READ_{model}", f"无法读取 session：{e}")
-            continue
-        if len(lines) < 5:
-            report.add("WARN", f"SESSION_SHORT_{model}", f"{hit.name} session 行数过少（{len(lines)}）")
-        assistant = 0
-        for line in lines:
-            if '"type":"assistant"' in line or '"role":"assistant"' in line:
-                assistant += 1
-        if assistant >= 20:
-            report.add("PASS", f"TURNS_{model}", f"{hit.name} 粗估 assistant 相关行 ≥20（≈{assistant}）")
-        elif assistant > 0:
+        assistant = count_assistant_turns(main)
+        if assistant >= MIN_ASSISTANT_TURNS:
             report.add(
-                "WARN",
+                "PASS",
                 f"TURNS_{model}",
-                f"{hit.name} 粗估 assistant 信号约 {assistant}（底线建议平均 ≥20）",
+                f"{hit.name}: assistant 轮次={assistant} ≥ {MIN_ASSISTANT_TURNS}"
+                f"（type=assistant 去重，对齐平台）",
             )
         else:
             report.add(
-                "WARN",
+                "FAIL",
                 f"TURNS_{model}",
-                f"{hit.name} 未能从 jsonl 粗估轮次，请人工确认平均 assistant 执行轮次 ≥20",
+                f"{hit.name}: assistant 轮次={assistant}，须 ≥{MIN_ASSISTANT_TURNS}"
+                f"（平台：每个模型各自达标，非三模型平均）",
             )
         call_level = hit / "call_level.jsonl"
         if not call_level.is_file() and sroot is not None:
@@ -847,6 +1638,8 @@ def check_one_package(package: Path, root: Path, report: Report) -> None:
     check_task_toml(package, report)
     check_meta(root, package, report)
     check_rubrics(package, report)
+    check_reports_eval(package, report)
+    check_bypass_sessions(package, report)
     check_workspace_clean(package, report)
     traj = package / "trajectories"
     if traj.is_dir():
@@ -903,6 +1696,9 @@ def run_check(root: Path) -> Report:
 
 
 def format_markdown(report: Report) -> str:
+    fails = [f for f in report.findings if f.level == "FAIL"]
+    warns = [f for f in report.findings if f.level == "WARN"]
+    passes = [f for f in report.findings if f.level == "PASS"]
     lines = [
         "# 上传前预检报告",
         "",
@@ -914,22 +1710,45 @@ def format_markdown(report: Report) -> str:
         "",
         f"> {report.disclaimer}",
         "",
-        "## 明细",
-        "",
     ]
-    for f in report.findings:
-        lines.append(f"- **{f.level}** `{f.code}` — {f.message}")
+    if fails:
+        lines.extend(["## 须修复（FAIL · 问题 + 修改建议）", ""])
+        for f in fails:
+            lines.append(f"- **FAIL** `{f.code}` — {f.display()}")
+        lines.append("")
+    if warns:
+        lines.extend(
+            [
+                "## 潜在疑点（WARN · 不单独当硬挂；建议关注）",
+                "",
+                "> 与平台 `warnings[]` 同形：`message` + 可选 `suggestion`，展示为「… 建议：…」。",
+                "",
+            ]
+        )
+        for f in warns:
+            lines.append(f"- **WARN** `{f.code}` — {f.display()}")
+        lines.append("")
+    lines.extend(["## 通过项（PASS，可折叠关注）", ""])
+    if not passes:
+        lines.append("- （无）")
+    else:
+        for f in passes:
+            lines.append(f"- **PASS** `{f.code}` — {f.message}")
     lines.extend(
         [
             "",
             "## 结构预检未覆盖（须自行验证；最终以甲方实际审核为准）",
             "",
-            "- 集合：题量≥3；**每题千问均挂**；禁三模型全过；Opus 过题率 ≤ 60%；Opus−千问 > 20%；GLM ≥ 1 道过",
-            "- 严格平均 assistant 执行轮次 ≥ 20（本脚本仅粗估行数 WARN）；私有题意 / 非公开 Issue 改造",
-            "- Docker 内 Baseline FAIL / GT PASS 的完整复现（本脚本默认不做 Docker 构建）",
-            "- apt/npm 全量 pin、pip 全量钉版本（Dockerfile 对 bare pip 仅 WARN；不替代人工）",
-            "- Rubric 人工/LLM 打分是否与测试结论一致；三模型条件完全一致的过题实测",
-            "- 每模型轨迹：session/ + cc-gateway-log/；平台不代提供模型 API（用户自备经 Gateway）",
+            "- 集合：题量≥3；Opus≤60%；Opus−千问>20%；GLM≥1（**单题**：本脚本已查禁三全过 / 千问挂，若有 scores）",
+            "- **Docker 内** Baseline FAIL / GT PASS（平台会真跑，本脚本不做 docker build）",
+            "- §B call-level 合并且字段校验（请另跑 merge_call_level.py --package … --check）",
+            "- apt 等全量 pin；私有题意语义；平台 Claude 语义分项",
+            "- 严格 assistant 轮次已按每模型 ≥20 FAIL；计法 = type=assistant 去重（与平台一致）",
+            "",
+            "## Agent 汇报约定",
+            "",
+            "- 对用户只复述 FAIL/WARN 时须带 **修改建议**（与上表「建议：」一致）；勿只写黑话",
+            "- **只读用户包**；勿就地改包「帮用户修好」再声称预检通过",
             "",
         ]
     )
@@ -946,7 +1765,12 @@ def main() -> int:
         required=True,
         help="待提交根目录（内含甲方原格式数据包），或直接指向数据包目录",
     )
-    parser.add_argument("--json", type=Path, default=None, help="可选：写出 JSON 报告")
+    parser.add_argument(
+        "--json",
+        type=Path,
+        default=None,
+        help="可选：写出 JSON 报告（须在数据包目录外；禁止写回用户包）",
+    )
     parser.add_argument("--markdown", action="store_true", help="stdout 输出 Markdown")
     args = parser.parse_args()
 
@@ -964,15 +1788,64 @@ def main() -> int:
         "summary": report.summary,
         "disclaimer": report.disclaimer,
         "findings": [asdict(f) for f in report.findings],
+        "warnings": [
+            {
+                "code": f.code,
+                "message": f.message,
+                "suggestion": f.suggestion,
+                "display": f.display(),
+            }
+            for f in report.soft_warnings()
+        ],
     }
     if args.json:
-        args.json.parent.mkdir(parents=True, exist_ok=True)
-        args.json.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        json_path = args.json.expanduser().resolve()
+        package_root = Path(report.package_dir).resolve() if report.package_dir else task_dir
+        # refuse write under task_dir or detected package tree
+        for root, label in ((task_dir, "task-dir"), (package_root, "package")):
+            try:
+                json_path.relative_to(root)
+            except ValueError:
+                # package_dir may be multi-path string - only exact when single path exists
+                continue
+            print(
+                f"ERROR: 预检 skill 禁止对用户数据包写入报告（--json={json_path} 落在 {label}={root} 内）。"
+                f"请写到包外临时路径，或仅用 --markdown 打 stdout。",
+                file=sys.stderr,
+            )
+            return 2
+        # also refuse if package_dir is a single existing dir
+        try:
+            pd = Path(report.package_dir)
+            if pd.is_dir() and json_path.is_relative_to(pd.resolve()):
+                print(
+                    f"ERROR: 预检 skill 禁止对用户数据包写入报告（--json 落在 package 内）。",
+                    file=sys.stderr,
+                )
+                return 2
+        except (ValueError, OSError, TypeError):
+            pass
+        json_path.parent.mkdir(parents=True, exist_ok=True)
+        json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
     if args.markdown or not args.json:
         print(format_markdown(report))
     else:
-        print(json.dumps({"verdict": report.verdict, "summary": report.summary}, ensure_ascii=False))
+        print(
+            json.dumps(
+                {
+                    "verdict": report.verdict,
+                    "summary": report.summary,
+                    "fail_preview": [
+                        {"code": f.code, "display": f.display()}
+                        for f in report.findings
+                        if f.level == "FAIL"
+                    ][:8],
+                    "warnings": payload["warnings"][:10],
+                },
+                ensure_ascii=False,
+            )
+        )
 
     return 0 if report.verdict != "PRECHECK_FAIL" else 1
 

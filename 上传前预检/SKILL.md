@@ -1,23 +1,59 @@
 ---
 name: client-harbor-presubmit
 description: >-
-  上传前预检众包任务包。用户只需提供一个「甲方数据包」目录路径。
-  有路径后：§A 结构脚本；§B call-level 合并校验；再**对照
-  甲方要求说明.md 做全面人工复核与 double check**（脚本未覆盖项必查）。
-  脚本绿 ≠ 终审。未给路径时必须先询问。
+  上传前预检众包任务包。对齐 3bench 平台 packagecheck 可静态硬门槛 + §B call-level +
+  对照 甲方要求说明.md double check。轮次每模型≥20、scores/reports、禁三模全过/千问须挂等
+  与网站预审一致；仍不跑 Docker。绿 ≠ 终审。未给路径先询问。
 ---
 
 # 上传前预检（众包自包含包）
 
-对用户**已整理好的甲方数据包**做检查：
+对用户**已整理好的甲方数据包**做检查，**尽量与平台网站 `packagecheck` 同严**：
 
-1. **§A 结构脚本**：布局、固定版本镜像、空壳测试、脏 workspace、密钥粗扫等  
-2. **§B 合并 + call-level 字段**：包内 session + Gateway log → 临时 call-level 再校验  
-3. **对照权威要求全文再查一遍（double check）** — 以  
-   **[`../甲方要求说明.md`](../甲方要求说明.md)** 为准做**全面核对**  
-   （含脚本未覆盖项：集合比例、Baseline/GT 真跑、私有题意、依赖是否真正钉版本等）
+1. **§A 脚本**：结构 + **平台静态硬门槛**（见下表）  
+2. **§B 合并 call-level**（effort / Opus signature 等）  
+3. **§C** 对照 **[`../甲方要求说明.md`](../甲方要求说明.md)** 全面复核 + double check  
+4. 仍**不**在本地替代 Docker/GT 真跑——网站会跑；用户须自测 Baseline FAIL、GT PASS  
 
-用户交卷材料只有 **Claude Code session** 与 **本 Gateway 抓包**；**甲方 call-level 形态必须合并后才能得到**。正式预检**不得**把合并产物写进用户数据包。
+## 硬规则：只读用户包（禁止任何写入）
+
+- **一律只读**用户提供的数据包：`session/`、`cc-gateway-log/`、workspace 等  
+- **禁止**写回 `call_level.jsonl`、`agents/`、修改 tests/Dockerfile/scores，或任何就地「整理」  
+- §B 合并产物**仅**落系统临时目录（或显式 `--scratch-dir` 且须在包外）  
+- `--json` / `--report` 等报告路径也**不得**落在数据包内；默认 stdout  
+- Agent **不得**为「修好预检」去改用户包内容；只汇报 FAIL/WARN  
+
+用户交卷只有 **session + Gateway**；call-level 须 §B 在**临时目录**合并校验。
+
+---
+
+## 与平台预审（3bench）对齐的 §A 硬项
+
+| 项 | 级别 | 说明 |
+| --- | --- | --- |
+| 必备路径 + README、空壳 test.sh、脏 workspace、密钥 | **FAIL** | 与 platform structure/content_rules |
+| **Dockerfile：FROM 禁 latest/无 tag**；**pip 裸包名 FAIL**；npm 未钉版本 FAIL | **FAIL** | 甲方「依赖固定版本」；对齐 `dockerfile_pin.go`（主 Dockerfile + workspace/Dockerfile） |
+| `meta.task_id` **=** 任务目录名 | **FAIL** | 平台 `META_TASK_ID_MISMATCH` |
+| 每模型主会话 **仅 1 条** `.jsonl` | **FAIL** | |
+| 每模型 assistant 轮次 **各自 ≥ 20**（`type=assistant` 去重） | **FAIL** | **非**三模型平均；平台 quality |
+| `scores/rubric_scores.json`：三模型 `eval_pass` + 五维 1–5 + `agreement_score` | **FAIL** | 平台 rubric |
+| correctness 与 `eval_pass` 不得冲突 | **FAIL** | 过题 corr≥4；挂题 corr≠5 |
+| `reports/<model>/**/eval_result.json` 可解析 `eval_pass` | **FAIL** | 平台 models（须在包内 `reports/`，勿放包外） |
+| reports 与 scores 的 `eval_pass` 一致 | **FAIL** | |
+| 三模型都过 / 千问本题过 | **FAIL** | 众包单题硬门槛 |
+| instruction 强泄题词（ground_truth 等） | **FAIL** | 软词 WARN |
+| 旁路 `multi-sessions` | **FAIL** | |
+| task_rubric 五维 `task_specific_criteria` | **FAIL** | |
+| session/ + 非空 cc-gateway-log/ | **FAIL** | |
+| **Docker Baseline/GT 真跑** | 本 Skill **不跑** | 平台会跑；§C 提醒用户已自测 |
+
+Dockerfile 细则（脚本硬 FAIL，勿依赖 latest）：
+
+- **镜像**：`FROM ubuntu:24.04` / `name@sha256:…` 合法；`FROM ubuntu`、`:latest` 不合法  
+- **pip**：`pip install requests==2.32.3`；**`pip install -r requirements.txt` 会打开 requirements 检查文件内是否 `pkg==x.y.z`（裸包名 FAIL；文件缺失 FAIL）**  
+- **npm**（本脚本更严）：`npm install lodash@4.17.21`；裸包名 FAIL（平台侧目前主要硬管 pip）
+
+脚本 PASS **不保证**网站通过：网站还有 Docker/GT、可能有 Claude 语义分项、超时 30 分钟等。
 
 ---
 
@@ -43,17 +79,18 @@ description: >-
 
 - 未给路径声称预检完成  
 - **只跑 §A/§B 脚本、不读「甲方要求说明」就声称全面合格**  
-- 正式流程把 `call_level.jsonl` / `agents/` **写回用户数据包**（污染包）  
+- **对用户数据包做任何创建/修改/删除**（含写回 call_level、agents、改 instruction/tests/Dockerfile/scores、就地「修包」）  
 - 要求用户事先手写 call-level  
 - 索要本机 session-root / gateway-root（调试除外）
+- 使用已禁用的 `--write-into-package` 或把 `--scratch-dir`/`--json` 指进用户包
 
 ---
 
 ## 开场可告知用户（拿到路径之后）
 
 > 将用这一路径：  
-> 1）脚本查包结构与 call-level；2）再按 **甲方要求说明.md** 做**全面复核 / double check**（含脚本覆盖不到的门槛）。  
-> **绿 ≠ 结算；最终以甲方审核为准。**
+> 1）脚本按**与 3bench 平台对齐的硬门槛**查包结构 / scores / reports / 轮次；2）call-level 合并校验；3）再按 **甲方要求说明.md** double check。  
+> **仍不替代网站 Docker 预审与甲方终审。**
 
 ---
 
@@ -63,34 +100,23 @@ description: >-
 PACK = 用户数据包目录
     → §A：presubmit_check.py --task-dir PACK
     → §B：merge_call_level.py --package PACK --check
-         · 只读 trajectories/<模型>/session/ 与 cc-gateway-log/
-         · 合并到系统临时目录（scratch）
-         · 校验合并后 JSONL：effort high+；有 thinking 时 Opus 强制 **signature 非空**
-    → §C double check（Agent 必做，不可跳过）：
-         · 打开并对照 ../甲方要求说明.md（全文 + 附录 Checklist）
-         · 按该文件逐项核对包与用户声明：
-           必备材料、禁止事项、单题硬门槛、集合比例、采集纪律、
-           交付结构、题意私有、Docker 依赖钉版本（不止 latest）、
-           Baseline FAIL / GT PASS（脚本不做 Docker 时须询问用户是否已自测）等
-         · 特别复查：脚本「未覆盖」清单 vs 甲方要求说明中的红色硬门槛
-         · 脚本 FAIL 与全文复核差异一并汇报
-    → 汇报：§A / §B 结论 + §C 对照「甲方要求说明」的遗漏/风险项
+    → §C：对照 ../甲方要求说明.md + 平台未跑项（尤其 Docker Baseline/GT）
+    → 汇报（分：脚本硬 FAIL / WARN / 须用户自测 Docker / 集合比例）
 ```
 
 ### §C · 对照「甲方要求说明」全面复核（double check）
 
-**权威文件（必读）：** [`../甲方要求说明.md`](../甲方要求说明.md)
+**权威文件（必读）：** [`../甲方要求说明.md`](../甲方要求说明.md)（**甲方公布的主要验收标准**）
 
-Agent **不得**把 §A/§B 脚本 PASS 当作「已满足甲方全部要求」。在脚本跑完后必须：
-
-1. **通读 / 检索**该文件的合格门槛、交付结构、附录 Checklist（至少 C1～C7、§4、§5）。  
-2. **按该文件做全面检查**，把每一条要求映射到当前 `PACK`（能打开的文件就打开核对；需真跑 Docker / 集合过题率的，标注「须用户确认」或「结构无法自动判定」）。  
-3. **再做 second pass**：对照脚本报告中的「结构预检未覆盖」与甲方红色硬门槛，确认没有漏报。  
-4. 汇报时分开写：  
-   - 机器预检（§A/§B）  
-   - 对照《甲方要求说明》的人工/Agent 复核结论（问题列表 + 通过项摘要）  
-
-若与脚本冲突：以 **[甲方要求说明.md](../甲方要求说明.md)** 与用户最终声明为准，并写明依据章节。
+1. 通读合格门槛、交付结构、附录 Checklist（C1～C7、§4、§5）。  
+2. 映射到 `PACK`；下列**脚本未覆盖**项 → 标「须用户确认」：
+   - **Docker 真构建**（建议 ≤30 min）+ Baseline `test.sh` FAIL + 套 GT 后 PASS  
+   - **集合级比例**（题量≥3、千问全挂、Opus≤60%、Opus−千问>20%、GLM≥1 道过）  
+   - 私有题意 / 未抄公开 Issue·DeepSWE；无外部登录·强时效网页  
+   - 三模型**同一份** instruction + 同一 Baseline/测试/Docker（过程一致性）  
+   - Opus 失败归因于题难而非环境；未伪造 session；未中途改测试凑分  
+3. Second pass：对照脚本「未覆盖」与甲方红色硬门槛。  
+4. 分条汇报机器预检 vs 全文复核。
 
 ### §A 结构
 
@@ -99,20 +125,6 @@ python3 上传前预检/scripts/presubmit_check.py \
   --task-dir <PACK> \
   --markdown
 ```
-
-§A 除布局与轨迹目录外，还会静态检查（节选）：
-
-| 规则 | 级别 |
-| --- | --- |
-| base 镜像 `:latest` / 无 tag；安装命令 `@latest` | **FAIL** |
-| `README.md` 缺失 | **FAIL** |
-| `tests/test.sh` 空壳（仅 `exit 0` / `true`） | **FAIL** |
-| workspace 含 `node_modules` / `__pycache__` / `.git` / `ground_truth` 等（含嵌套） | **FAIL** |
-| Dockerfile / workspace 常见密钥文件疑似硬编码密钥 | **FAIL** |
-| `pip install` 未写版本号 | **WARN**（启发式） |
-| `manifest.json` 缺失 | **WARN** |
-| `instruction.md` 提及 ground_truth / assert / test.sh 等 | **WARN** |
-| 不做 `docker build`、不查集合过题比例 | 人工 / 对照甲方要求说明 + 终审 |
 
 ### §B 合并到临时文件 + 甲方字段校验
 
@@ -131,66 +143,52 @@ python3 上传前预检/scripts/merge_call_level.py \
   --check
 ```
 
-脚本行为（正式预检默认）：
-
-```text
-读取（不得改写）：
-  trajectories/<模型>/session/…jsonl
-  trajectories/<模型>/cc-gateway-log/*.json
-
-写出（临时目录，例如 /tmp/cc-calllevel-merge-XXXX/）：
-  <模型>/call_level.jsonl
-
-然后：
-  对合并后的 records 做甲方 call-level 字段检测
-```
-
-| 选项 | 含义 |
-| --- | --- |
-| 默认 | scratch `mkdtemp`，**不污染包** |
-| `--scratch-dir DIR` | 指定临时产物根 |
-| `--write-into-package` | **显式**才写回包内 `call_level.jsonl`（调试；正式预检勿用） |
-| `--write-agents` | 可选写 agents；勿与污染包默认混用 |
-
 合并策略：
 
-- `request.*` ← Gateway 抓包  
-- `response` 必要时用 session 补齐  
-- 禁止编造 system/tools  
-- **effort / thinking_effort**：须为 `high` / `xhigh` / `max`，且来自 `request.output_config.effort`（禁止脚本缺省硬填）  
-- **thinking / signature 硬门槛**（仅合并校验用）：
-  - **仅当** `response_data.content` 中已有 `type=thinking` 块时才检查 signature  
-  - **无 thinking 块 → 不查** signature（不因此 FAIL）  
-  - **Opus**：有 thinking 时 **`signature` 须非空**（thinking 正文可空）  
-  - **GLM / 千问**：有 thinking 也不把 signature 当作硬性要求
+- `request.*` ← Gateway；response 可补 session  
+- **effort** high|xhigh|max 且来自 `output_config.effort`  
+- **thinking/sig**：有 thinking 时 Opus 强制 signature；无 thinking 不查；GLM/千问不硬检 sig  
 
 ---
 
 ## 覆盖 / 不覆盖
 
-| 覆盖 | 不覆盖（须靠 §C 对照《甲方要求说明》补全） |
+| 覆盖（尽量=平台静态机检） | 不覆盖（§C 须人工/用户自测） |
 | --- | --- |
-| 包布局；session + cc-gateway-log 成对 | 集合过题比例 |
-| **Dockerfile 禁 latest / 无 tag**；pip bare 包 **WARN** | apt/npm 全量 pin；**Docker 真跑** |
-| **README 必填**；空壳 test.sh；workspace 脏目录；密钥粗扫 | Baseline/GT 真跑对错 |
-| 包内两路日志合并 → 临时 call-level | 写回用户包 |
-| 甲方字段（tools/system/**effort high+**/stop；**Opus 有 thinking 则 sig 非空**） | 私有题意语义、Rubric 与测试一致性等终审项 |
+| 布局、GT 路径、README、密钥、脏 workspace | **Docker build / Baseline FAIL / GT PASS 真跑** |
+| **Dockerfile FROM pin + pip CLI/`-r requirements` 内固定版本 + npm** | `apt`/`yarn` 等其它包管理钉版（无硬检） |
+| scores/reports、轮次≥20/模型、众单题门槛 | **集合过题比例**（题量≥3、Opus/GLM/千问集合率） |
+| 1 条主 session + 非空 gateway；禁 multi-sessions | 私有题意/撞题/语义质量（Claude 末级 judgment） |
+| call-level 字段（§B，临时目录合并） | 平台 30min 墙钟；甲方终审/结算 |
+| 只读用户包（禁止写回） | 兼容模式 `--session`/`--out` 可写任意路径（**正式流程只用 `--package`**） |
 
 ---
 
 ## 报告怎么说
 
 1. `PACK=…`  
-2. §A markdown  
-3. §B 每模型：包内 session 路径、gateway 路径、session-id、**临时 out 路径**、records、字段 PASS/FAIL  
-4. **§C：已对照 [甲方要求说明.md](../甲方要求说明.md) 的全面复核结论**（问题 / 待用户确认 / 无明显问题）  
-5. 结构/合并/对照绿 ≠ 甲方终审  
+2. §A（标明是否含平台对齐 FAIL）  
+3. §B  
+4. §C  
+5. 明确：**本地绿 ≠ 3bench PASSED ≠ 结算**
 
-工作目录：`采集用户说明_final/`（或仓库中等价根）。
+### 问题 + 修改建议（对齐平台预审反馈）
+
+与网站 `Finding.message` + `Finding.suggestion` / `warnings[]` 同形：
+
+| 层 | 写法 |
+| --- | --- |
+| 脚本 stdout / markdown | **FAIL**/**WARN** 行：`问题描述 建议：具体改法` |
+| JSON | `findings[].message` + `findings[].suggestion`；`warnings[]` 仅 WARN |
+| Agent 对用户口述 | **必须带建议**：勿只报 code 或「有问题」；勿写黑话 |
+| 硬 FAIL vs 潜在疑点 | FAIL 须修才能谈过预检；WARN（如 AI 草拟分、挂题 correctness=4）不硬挡但建议改 |
+
+脚本内已对常见 code 带默认建议（Dockerfile pin、task_id、轮次、scores/reports、AI 草拟等）；平台 soft 的 `CORR_SOFT_TENSION` / `CORR_PASS_NOT_5` / `RUBRIC_AI_DRAFTED` 本 skill 同步。
+
+工作目录：`采集用户说明_final/`。
 
 ## 权威口径
 
-- **[../甲方要求说明.md](../甲方要求说明.md)** ← **全面检查与 double check 的主依据**  
-- [../用户操作步骤.md](../用户操作步骤.md)  
-- [../Gateway采集说明.md](../Gateway采集说明.md)  
-- [../甲方数据包参考样例/](../甲方数据包参考样例/)  
+- **[../甲方要求说明.md](../甲方要求说明.md)** — 甲方主要验收标准  
+- 平台实现参考：`甲方要求/platform/api/internal/packagecheck/`（structure / quality / rubric soft+suggestion / content_rules）  
+- [../用户操作步骤.md](../用户操作步骤.md) · [../Gateway采集说明.md](../Gateway采集说明.md)  

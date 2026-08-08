@@ -28,11 +28,123 @@ MAIN_SESSION_NAMES = frozenset({"session.jsonl"})
 AUX_JSONL_NAMES = frozenset({"call_level.jsonl", "calls.jsonl"})
 
 
+def path_is_within(path: Path, root: Path) -> bool:
+    """True if path is root itself or a descendant (after resolve)."""
+    try:
+        path.expanduser().resolve().relative_to(root.expanduser().resolve())
+        return True
+    except (ValueError, OSError):
+        return False
+
+
+def refuse_if_write_under_package(package: Path, *targets: Path | None) -> None:
+    """Raise ValueError if any target path would write inside the user package."""
+    package = package.expanduser().resolve()
+    for t in targets:
+        if t is None:
+            continue
+        p = t.expanduser().resolve()
+        if path_is_within(p, package):
+            raise ValueError(
+                f"预检 skill 禁止对用户数据包写入：{p}（package={package}）"
+            )
+
+# Anthropic Messages server/client built-in tools (no custom description/input_schema).
+# e.g. {"type":"web_search_20250305","name":"web_search","max_uses":8}
+_ANTHROPIC_BUILTIN_TOOL_TYPES = frozenset(
+    {
+        "web_search_20250305",
+        "web_search_20250219",
+        "web_fetch_20250305",
+        "web_fetch_20250910",
+        "code_execution_20250522",
+        "code_execution_20250825",
+        "bash_code_execution_20250918",
+        "text_editor_code_execution_20250429",
+        "computer_20250124",
+        "computer_20241022",
+    }
+)
+_ANTHROPIC_BUILTIN_TOOL_NAMES = frozenset(
+    {
+        "web_search",
+        "web_fetch",
+        "code_execution",
+        "bash_code_execution",
+        "text_editor_code_execution",
+        "str_replace_based_edit_tool",
+        "computer",
+    }
+)
+
+
+def _is_anthropic_builtin_tool(tool: dict[str, Any]) -> bool:
+    """True for Anthropic hosted/built-in tool defs (not user custom tools)."""
+    typ = str(tool.get("type") or "").strip()
+    name = str(tool.get("name") or "").strip().lower()
+    if typ in _ANTHROPIC_BUILTIN_TOOL_TYPES:
+        return True
+    # future-dated / unknown YYYYMMDD suffix on known families
+    if re.match(
+        r"^(web_search|web_fetch|code_execution|bash_code_execution|"
+        r"text_editor_code_execution|computer)_\d{8}$",
+        typ,
+    ):
+        return True
+    # bare type without date + known name, and no input_schema (custom tools always have schema)
+    if name in _ANTHROPIC_BUILTIN_TOOL_NAMES and not isinstance(tool.get("input_schema"), dict):
+        if typ and typ != "custom" and "function" not in tool:
+            return True
+        if not typ and not tool.get("description") and "function" not in tool:
+            return True
+    return False
+
+
 @dataclass
 class Issue:
     level: str  # PASS | WARN | FAIL
     code: str
     message: str
+    suggestion: str = ""  # 可选：如何修改（对齐平台）
+
+    def display(self) -> str:
+        msg = (self.message or "").strip()
+        sug = (self.suggestion or "").strip()
+        if not msg:
+            return sug
+        if not sug:
+            return msg
+        if "建议：" in msg or "建议:" in msg:
+            return msg
+        return f"{msg} 建议：{sug}"
+
+
+# §B 常见 FAIL 的修改建议（code 含子串则匹配）
+_CALL_LEVEL_SUGGESTIONS: list[tuple[str, str]] = [
+    ("EFFORT_SOURCE", "在 Gateway 请求里设 request.output_config.effort=high|xhigh|max，勿事后硬填。"),
+    ("_EFFORT", "thinking_effort 只能是 high / xhigh / max。"),
+    ("SYSTEM", "request.system 用 content blocks 列表并有实质 text。"),
+    ("TOOLS", "request.tools 须非空；自定义 tool 含 name/description/input_schema。"),
+    ("THINKING_SIG", "Opus 且 content 含 type=thinking 时 signature 须非空；无 thinking 可不查。"),
+    ("TRACE_URL", "去掉 claude-trace 的 request.url，改为完整 Anthropic Messages body。"),
+    ("_RD", "补全 response.response_data（assistant message）。"),
+    ("_CONTENT", "response_data.content 须非空 content blocks。"),
+    ("_STOP", "stop_reason 用 end_turn|tool_use|max_tokens|stop_sequence。"),
+    ("GW_NO_CANDIDATE", "cc-gateway-log 须有完整 2xx LLM 调用（含 system+tools+messages）。"),
+    ("MAIN_SESSION", "确认 trajectories/<模型>/session/session.jsonl 存在。"),
+]
+
+
+def attach_issue_suggestions(issues: list[Issue]) -> None:
+    """为 FAIL/WARN 补默认修改建议（已有 suggestion 不覆盖）。"""
+    for i in issues:
+        if i.level not in ("FAIL", "WARN") or (i.suggestion or "").strip():
+            continue
+        code = i.code or ""
+        for key, sug in _CALL_LEVEL_SUGGESTIONS:
+            if key in code:
+                i.suggestion = sug
+                break
 
 
 @dataclass
@@ -725,17 +837,49 @@ def write_agents(agents_out: Path, payload: dict[str, Any]) -> None:
         )
 
 
-def _is_opus_model(model: str) -> bool:
-    """True for claude-opus* / *opus* routes; GLM/Qwen are non-Opus."""
-    m = str(model or "").strip().lower().replace("_", "-")
-    if not m:
+def _requires_thinking_signature(*model_hints: str) -> bool:
+    """Only true Anthropic Claude Opus must have thinking.signature.
+
+    Qwen/GLM never (product rule). Gateway often leaves request.model as
+    ``claude-opus-*`` even when the backend is qwen/glm — so we consult
+    *all* hints (request.model, response model, trajectories/<name>/).
+    If any hint is qwen/glm/… → do not require signature.
+    """
+    parts = [
+        str(h or "").strip().lower().replace("_", "-")
+        for h in model_hints
+        if h is not None and str(h).strip()
+    ]
+    if not parts:
         return False
-    return "opus" in m
+    blob = " ".join(parts)
+    # Non-Opus providers (BaiLian / 智谱等)：永不强制 signature
+    for token in (
+        "qwen",
+        "glm",
+        "deepseek",
+        "kimi",
+        "moonshot",
+        "minimax",
+        "doubao",
+        "seed-",
+        "ernie",
+    ):
+        if token in blob:
+            return False
+    # 仅 Claude Opus 路由
+    return "opus" in blob
+
+
+def _is_opus_model(model: str) -> bool:
+    """Backward-compat alias: single-string Opus identity (prefer _requires_thinking_signature)."""
+    return _requires_thinking_signature(model)
 
 
 def validate_call_level_records(
     records: list[dict[str, Any]],
     assistant_count: int | None = None,
+    model_hint: str = "",
 ) -> list[Issue]:
     issues: list[Issue] = []
     if not records:
@@ -787,6 +931,12 @@ def validate_call_level_records(
                     if not isinstance(tool, dict):
                         issues.append(Issue("FAIL", f"{prefix}_TOOL_{ti}", "tool 非对象"))
                         continue
+                    # Anthropic server / client built-in tools (e.g. web_search_20250305)
+                    # use {type,name,max_uses} without description/input_schema — delivery-valid.
+                    if _is_anthropic_builtin_tool(tool):
+                        if not str(tool.get("name") or "").strip():
+                            issues.append(Issue("FAIL", f"{prefix}_TOOL_{ti}", "builtin tool 缺 name"))
+                        continue
                     if not tool.get("name") or not tool.get("description"):
                         issues.append(Issue("FAIL", f"{prefix}_TOOL_{ti}", "tool 缺 name/description"))
                     if not isinstance(tool.get("input_schema"), dict):
@@ -830,12 +980,12 @@ def validate_call_level_records(
                         if isinstance(b, dict) and b.get("type") == "thinking"
                     ]
                     if thinking_blocks:
-                        model_name = ""
-                        if isinstance(req, dict):
-                            model_name = str(req.get("model") or "")
-                        if not model_name:
-                            model_name = str(rd.get("model") or "")
-                        require_sig = _is_opus_model(model_name)
+                        req_model = str(req.get("model") or "") if isinstance(req, dict) else ""
+                        rd_model = str(rd.get("model") or "")
+                        # Prefer response/route identity over request.model (which may spoof opus).
+                        require_sig = _requires_thinking_signature(
+                            rd_model, model_hint, req_model
+                        )
                         if require_sig:
                             for ti, tb in enumerate(thinking_blocks):
                                 sig = tb.get("signature")
@@ -844,7 +994,7 @@ def validate_call_level_records(
                                         Issue(
                                             "FAIL",
                                             f"{prefix}_THINKING_SIG_{ti}",
-                                            "Opus：存在 type=thinking 时 signature 须非空（thinking 正文可空）",
+                                            "Opus：存在 type=thinking 时 signature 须非空（thinking 正文可空；Qwen/GLM 不检）",
                                         )
                                     )
                 stop = rd.get("stop_reason")
@@ -873,12 +1023,18 @@ def validate_call_level_records(
                 "FAIL",
                 "CLIENT_CALL_LEVEL",
                 f"未通过甲方 call-level 字段检测（FAIL={fails}）",
+                suggestion="按上列 FAIL 逐条改 session 采集方式或 Gateway 配置后重新 --package --check。",
             )
         )
+    attach_issue_suggestions(issues)
     return issues
 
 
-def validate_call_level_file(path: Path, assistant_count: int | None = None) -> list[Issue]:
+def validate_call_level_file(
+    path: Path,
+    assistant_count: int | None = None,
+    model_hint: str = "",
+) -> list[Issue]:
     if not path.is_file():
         return [Issue("FAIL", "FILE", f"不存在：{path}")]
     records: list[dict[str, Any]] = []
@@ -890,7 +1046,9 @@ def validate_call_level_file(path: Path, assistant_count: int | None = None) -> 
             records.append(json.loads(line))
         except json.JSONDecodeError as e:
             return [Issue("FAIL", "JSONL", f"坏行：{e}")]
-    return validate_call_level_records(records, assistant_count=assistant_count)
+    return validate_call_level_records(
+        records, assistant_count=assistant_count, model_hint=model_hint
+    )
 
 
 def issues_verdict(issues: list[Issue]) -> str:
@@ -1154,7 +1312,9 @@ def full_merge(
             snapshot_out.write_text(json.dumps(snap, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
             report.add("PASS", "WRITE_SNAPSHOT", f"写出 {snapshot_out}")
 
-    v_issues = validate_call_level_records(records, assistant_count=len(assistants))
+    v_issues = validate_call_level_records(
+        records, assistant_count=len(assistants), model_hint=model or ""
+    )
     for iss in v_issues:
         report.issues.append(iss)
     return records, report
@@ -1346,9 +1506,14 @@ def full_merge_package_model(
 ) -> tuple[list[dict[str, Any]], MergeReport, ResolvedPaths]:
     """交卷包内单模型合并：只读 session/ + cc-gateway-log/，不回源本机 projects。
 
-    默认不把产物写进用户包（须显式提供 out_path，或 write_into_package=True 时才写
-    model_dir/call_level.jsonl）。
+    **禁止**把产物写进用户包。write_into_package 保留参数兼容但恒拒绝。
+    须提供 out_path 于包外，或 out_path=None 仅内存校验。
     """
+    if write_into_package:
+        raise ValueError(
+            "write_into_package 已禁用：预检 skill 禁止对用户数据包做任何写入"
+        )
+
     resolved = resolve_package_model(model_dir)
     report = MergeReport(session_id=resolved.session_id)
     for iss in resolved.issues:
@@ -1357,17 +1522,15 @@ def full_merge_package_model(
         return [], report, resolved
 
     model_dir = model_dir.expanduser().resolve()
-    if out_path is None:
-        if write_into_package:
-            out_path = model_dir / "call_level.jsonl"
-        else:
-            out_path = None  # in-memory only unless caller sets path
-
-    if subagent_out_dir is None and write_into_package and resolved.subagent_jsonls:
-        subagent_out_dir = model_dir / "subagents_call_level"
-    elif not write_into_package and subagent_out_dir is None:
-        # keep subagent merge off-package unless out_path parent exists and caller set subagent dir
-        subagent_out_dir = None
+    # package ≈ …/trajectories/<model>
+    package_guess = (
+        model_dir.parent.parent
+        if model_dir.parent.name == "trajectories"
+        else model_dir.parent
+    )
+    refuse_if_write_under_package(
+        package_guess, out_path, agents_out, snapshot_out, subagent_out_dir
+    )
 
     records, merge_report = full_merge(
         session_path=resolved.main_session,
@@ -1376,7 +1539,7 @@ def full_merge_package_model(
         agents_out=agents_out,
         snapshot_out=snapshot_out,
         model=model or model_dir.name,
-        subagent_jsonls=resolved.subagent_jsonls if write_into_package or subagent_out_dir else resolved.subagent_jsonls,
+        subagent_jsonls=resolved.subagent_jsonls,
         subagent_out_dir=subagent_out_dir,
         expected_session_id=resolved.session_id,
     )
@@ -1400,12 +1563,19 @@ def full_merge_package(
 ) -> list[tuple[str, list[dict[str, Any]], MergeReport, ResolvedPaths, Path | None]]:
     """合并数据包 trajectories 下全部（或选定）模型。
 
-    默认产物写到 out_root（临时目录）；write_into_package=True 时才写包内 call_level.jsonl。
-    默认不写 package/agents/。
+    产物只写 out_root（须在 package 外）；**禁止** write_into_package。
 
     Returns list of (model_dir_name, records, report, resolved, out_path|None).
     """
+    if write_into_package:
+        raise ValueError(
+            "write_into_package 已禁用：预检 skill 禁止对用户数据包做任何写入"
+        )
+
     package = package.expanduser().resolve()
+    if out_root is not None:
+        refuse_if_write_under_package(package, out_root)
+
     traj = package_traj_root(package)
     results: list[tuple[str, list[dict[str, Any]], MergeReport, ResolvedPaths, Path | None]] = []
     if not traj.is_dir():
@@ -1428,30 +1598,29 @@ def full_merge_package(
                 if p.is_dir():
                     model_dirs.append(p)
 
-    agents_out = package / "agents" if write_agents and write_into_package else None
-    if write_agents and out_root is not None and not write_into_package:
+    agents_out: Path | None = None
+    if write_agents and out_root is not None:
         agents_out = out_root / "agents"
+        refuse_if_write_under_package(package, agents_out)
 
     for i, md in enumerate(model_dirs):
-        if write_into_package:
-            out: Path | None = md / "call_level.jsonl"
-            sub_out = md / "subagents_call_level" if (md / "session" / "subagents").is_dir() else None
-        elif out_root is not None:
+        if out_root is not None:
             safe = md.name.replace("/", "_")
-            out = out_root / safe / "call_level.jsonl"
+            out: Path | None = out_root / safe / "call_level.jsonl"
             out.parent.mkdir(parents=True, exist_ok=True)
-            sub_out = out_root / safe / "subagents_call_level"
+            sub_out: Path | None = out_root / safe / "subagents_call_level"
         else:
             out = None
             sub_out = None
         ao = agents_out if write_agents and i == 0 else None
+        refuse_if_write_under_package(package, out, ao, sub_out)
         recs, rep, resolved = full_merge_package_model(
             model_dir=md,
             out_path=out,
             agents_out=ao,
             model=md.name,
             subagent_out_dir=sub_out,
-            write_into_package=write_into_package,
+            write_into_package=False,
         )
         results.append((md.name, recs, rep, resolved, out))
     if not model_dirs:
