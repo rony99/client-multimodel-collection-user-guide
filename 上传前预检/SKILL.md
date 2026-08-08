@@ -32,7 +32,7 @@ description: >-
 | 项 | 级别 | 说明 |
 | --- | --- | --- |
 | 必备路径 + README、空壳 test.sh、脏 workspace、密钥 | **FAIL** | 与 platform structure/content_rules |
-| **Dockerfile：FROM 禁 latest/无 tag**；**pip 裸包名 FAIL**；npm 未钉版本 FAIL | **FAIL** | 甲方「依赖固定版本」；对齐 `dockerfile_pin.go`（主 Dockerfile + workspace/Dockerfile） |
+| **Dockerfile：FROM 禁 latest/无 tag**；**pip 须 `pkg==x.y.z` 定死**（裸名/`>=`/`~=` 等 FAIL，含 `-r` 文件）；npm 未钉版本 FAIL | **FAIL** | 甲方「依赖固定版本」；对齐 `dockerfile_pin.go`（主 Dockerfile + workspace/Dockerfile） |
 | `meta.task_id` **=** 任务目录名 | **FAIL** | 平台 `META_TASK_ID_MISMATCH` |
 | 每模型主会话 **仅 1 条** `.jsonl` | **FAIL** | |
 | 每模型 assistant 轮次 **各自 ≥ 20**（`type=assistant` 去重） | **FAIL** | **非**三模型平均；平台 quality |
@@ -47,11 +47,12 @@ description: >-
 | session/ + 非空 cc-gateway-log/ | **FAIL** | |
 | **Docker Baseline/GT 真跑** | 本 Skill **不跑** | 平台会跑；§C 提醒用户已自测 |
 
-Dockerfile 细则（脚本硬 FAIL，勿依赖 latest）：
+Dockerfile 细则（脚本硬 FAIL，**版本须定死**，与甲方「固定版本」一致）：
 
 - **镜像**：`FROM ubuntu:24.04` / `name@sha256:…` 合法；`FROM ubuntu`、`:latest` 不合法  
-- **pip**：`pip install requests==2.32.3`；**`pip install -r requirements.txt` 会打开 requirements 检查文件内是否 `pkg==x.y.z`（裸包名 FAIL；文件缺失 FAIL）**  
-- **npm**（本脚本更严）：`npm install lodash@4.17.21`；裸包名 FAIL（平台侧目前主要硬管 pip）
+- **pip**：**仅** `pkg==x.y.z`（具体版本）合法；**禁止**裸名、`>=`/`~=`/`!=`/`>`/`<`、`==*` 通配  
+  - `pip install -r requirements.txt` **会打开文件扫每一行**，同样只认 `pkg==x.y.z`；文件缺失 FAIL  
+- **npm**：**仅** `pkg@x.y.z`；禁止裸名与 `@latest`
 
 脚本 PASS **不保证**网站通过：网站还有 Docker/GT、可能有 Claude 语义分项、超时 30 分钟等。
 

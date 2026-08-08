@@ -94,10 +94,10 @@ CODE_SUGGESTIONS: dict[str, str] = {
         "将 Dockerfile 的 FROM 改为固定 tag（如 ubuntu:24.04）或 @sha256:…；禁止 :latest 与无 tag。"
     ),
     "DOCKER_PIP_PIN": (
-        "pip install 写 pkg==x.y.z；若用 -r requirements.txt，打开该文件把每一行包名钉版"
-        "（禁裸包名）；缺失的 -r 文件放回 environment/ 构建上下文。"
+        "pip 与 -r 文件统一写成 pkg==x.y.z 定死版本；禁止裸名、>=、~=、区间；"
+        "缺的 -r 文件放回 environment/ 构建上下文。"
     ),
-    "DOCKER_NPM_PIN": "npm 写 pkg@x.y.z（或 package-lock 中已锁版本的确定性安装）。",
+    "DOCKER_NPM_PIN": "npm 写死 pkg@x.y.z（具体版本号）；禁止裸名与 @latest。",
     "DIR_NAME": "包目录名仅允许字母数字 . _ -（例：my_task_01）。",
     "META_TASK_ID_MISMATCH": "将 zip/包顶层文件夹改名为 meta.task_id，或改 meta.task_id 与目录同名。",
     "META_TASK_ID": "在 meta.json 填写 task_id（与顶层目录名一致）。",
@@ -463,25 +463,95 @@ def _dockerfile_image_unpinned(image_ref: str, known_stages: set[str] | None = N
     return f"base 镜像未固定 tag/digest：`{ref}`（禁止隐式 latest）"
 
 
+def _pip_project_name(left: str) -> str:
+    left = (left or "").strip()
+    if "[" in left:
+        left = left.split("[", 1)[0]
+    return left.strip()
+
+
+def _is_concrete_pep440_version(ver: str) -> bool:
+    """True if version looks like a concrete pin (not wildcard / placeholder)."""
+    ver = (ver or "").strip()
+    if not ver:
+        return False
+    low = ver.lower()
+    if "*" in ver or low in ("x", "latest") or ver.endswith(".*") or ".x" in low:
+        return False
+    # reject empty range leftovers like "=1.0" from bad === split
+    if ver.startswith(("=", ">", "<", "~", "!")):
+        return False
+    return bool(re.match(r"^[A-Za-z0-9][A-Za-z0-9_.!+-]*$", ver))
+
+
 def _pip_token_unpinned_name(tok: str) -> str | None:
-    """Return package name if token is a bare PyPI-like ref without version pin."""
+    """Return package name if NOT pinned with exact pkg==x.y.z.
+
+    甲方「固定版本 / 定死」：仅 `name==具体版本`（或 `name===…`）通过。
+    裸名、>=、<=、~=、!=、>、< 一律 FAIL。
+    URL/VCS/路径安装不按 PyPI 名扫。
+    """
     tok = tok.strip().strip("'\"")
     if not tok or tok.startswith("-"):
         return None
-    if tok.startswith("http://") or tok.startswith("https://") or tok.startswith("git+"):
+    if tok.startswith(("http://", "https://", "git+", "svn+", "hg+", "file:")):
         return None
-    # local path / requirement file
-    if tok.endswith(".txt") or tok.endswith(".in") or "/" in tok or "\\" in tok:
+    if tok.endswith((".txt", ".in")) or "/" in tok or "\\" in tok:
         return None
-    if re.search(r"==|@|>=|<=|~=|!=|>|<", tok):
-        return None
+    if ";" in tok:
+        tok = tok.split(";", 1)[0].strip()
+
+    # exact: === (arbitrary equality) or ==
+    m = re.match(r"^(?P<left>.+?)(?P<op>===|==)(?P<ver>.+)$", tok)
+    if m:
+        name = _pip_project_name(m.group("left"))
+        ver = m.group("ver").strip()
+        if not name:
+            return None
+        if _is_concrete_pep440_version(ver):
+            return None
+        return name
+
+    # range / direct-url ref with @  → 未定死 / 非 ==
     name = tok
-    if "[" in name:
-        name = name.split("[", 1)[0]
-    name = name.strip()
+    for sep in ("!=", ">=", "<=", "~=", ">", "<", " @ ", "@"):
+        if sep in name:
+            name = name.split(sep, 1)[0]
+            break
+    name = _pip_project_name(name)
     if not name or name in (".", "..") or name.startswith("."):
         return None
     return name
+
+
+def _npm_token_not_exact_pin(tok: str) -> str | None:
+    """Return label if npm package token is not pkg@x.y.z exact (禁 @latest)。"""
+    tok = tok.strip().strip("'\"")
+    if not tok or tok.startswith("-"):
+        return None
+    if tok.startswith(("http://", "https://", "file:", "git+")):
+        return None
+    if tok in (".", ".."):
+        return None
+    # already versioned: name@1.2.3 or @scope/pkg@1.2.3
+    if tok.startswith("@"):
+        # scoped: @scope/name@version needs 2 @
+        if tok.count("@") >= 2:
+            ver = tok.rsplit("@", 1)[-1]
+            if ver.lower() == "latest" or not ver or ver == "*":
+                return tok
+            if re.match(r"^[\w.*+-]+$", ver) and "*" not in ver:
+                return None
+            return tok
+        return tok  # @scope/pkg without version
+    if "@" in tok:
+        ver = tok.rsplit("@", 1)[-1]
+        if ver.lower() == "latest" or not ver or "*" in ver:
+            return tok.split("@", 1)[0] or tok
+        if re.match(r"^[\w.+-]+$", ver):
+            return None
+        return tok.split("@", 1)[0] or tok
+    return tok  # bare
 
 
 def _pip_req_file_refs(body: str) -> list[str]:
@@ -645,38 +715,21 @@ def _pip_pin_failures(dockerfile: Path, package: Path, body: str) -> list[str]:
 
 
 def _npm_install_unpinned(body: str) -> list[str]:
-    """npm install/i/add bare package without @version."""
+    """npm install/i/add without exact pkg@x.y.z (禁 @latest / 裸名)。"""
     hits: list[str] = []
     seen: set[str] = set()
     flat = _join_dockerfile_continuations(body)
     for m in re.finditer(r"\bnpm\s+(?:install|i|add)\b([^\n]*)", flat, re.IGNORECASE):
         rest = m.group(1)
         if re.search(r"(^|\s)-g\s*$", rest) or rest.strip() in ("", "-g"):
-            # npm install -g with no pkg or package.json only
             continue
         for tok in rest.split():
             if tok.startswith("-"):
                 continue
-            if tok.startswith("http://") or tok.startswith("https://"):
-                continue
-            if tok in (".", "..") or tok.startswith("file:"):
-                continue
-            # scoped @scope/pkg without version still unpinned unless @version after pkg
-            # good: @scope/pkg@1.2.3  or  foo@1.2.3
-            if re.search(r"@\d", tok) or re.search(r"@[\w.-]+\d", tok):
-                # has version-ish @ver at end (foo@1.0.0 or @s/p@1.0.0)
-                if re.match(r"@[^/]+/[^@]+@.+", tok) or (not tok.startswith("@") and "@" in tok[1:]):
-                    continue
-                if tok.startswith("@") and tok.count("@") >= 2:
-                    continue
-            if not tok.startswith("@") and "@" in tok:
-                continue  # name@version
-            if tok.startswith("@") and tok.count("@") >= 2:
-                continue
-            name = tok.strip("'\"")
-            if name not in seen:
-                seen.add(name)
-                hits.append(name)
+            bad = _npm_token_not_exact_pin(tok)
+            if bad and bad not in seen:
+                seen.add(bad)
+                hits.append(bad)
     return hits
 
 
@@ -751,14 +804,14 @@ def _check_one_dockerfile(path: Path, package: Path, report: Report) -> None:
         report.add(
             "FAIL",
             "DOCKER_PIP_PIN",
-            f"{rel}：pip 未钉版本：{shown}{more}"
-            f"（须 pkg==x.y.z；含 -r requirements 文件内依赖；甲方固定版本）",
+            f"{rel}：pip 未钉死版本：{shown}{more}"
+            f"（甲方须 pkg==x.y.z 定死；禁止裸名/>=/~=/区间；-r 文件内同样）",
         )
     else:
         report.add(
             "PASS",
             "DOCKER_PIP_PIN",
-            f"{rel}：pip install / -r requirements 未见未钉版本包名",
+            f"{rel}：pip install / -r requirements 均为 pkg==x.y.z 定死版本",
         )
 
     npm_bad = _npm_install_unpinned(body)
@@ -768,12 +821,12 @@ def _check_one_dockerfile(path: Path, package: Path, report: Report) -> None:
         report.add(
             "FAIL",
             "DOCKER_NPM_PIN",
-            f"{rel}：npm install 未钉版本：{shown}{more}（须 pkg@x.y.z；甲方依赖固定版本）",
+            f"{rel}：npm 未钉死版本：{shown}{more}（须 pkg@x.y.z 定死；禁裸名/@latest）",
         )
     else:
         # 多数包无 npm，静默 PASS 过噪；仅有 npm 装包行才 PASS
         if re.search(r"\bnpm\s+(?:install|i|add)\b", body, re.I):
-            report.add("PASS", "DOCKER_NPM_PIN", f"{rel}：未见未钉版本的 npm install 包名")
+            report.add("PASS", "DOCKER_NPM_PIN", f"{rel}：npm 均为 pkg@x.y.z 定死版本")
 
 
 def check_dockerfile_pins(package: Path, report: Report) -> None:
