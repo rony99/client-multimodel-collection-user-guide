@@ -79,14 +79,56 @@ RUBRIC_DIMS = (
 MIN_ASSISTANT_TURNS = 20
 
 DISCLAIMER = (
-    "本检查对齐 3bench **平台 packagecheck 可静态机检项**"
-    "（结构 / 轮次 / scores·rubric / reports·eval_pass / 众单题过题门槛 / call-level 在 §B），"
-    "**不跑 Docker/GT 真测**，**不查集合过题比例**，不代表结算或终审。"
-    "请自行核验：题量≥3、集合比例；Docker Baseline FAIL+GT PASS。"
-    "平台更严：每模型 assistant 轮次各自 ≥20（非三模型平均）。"
-    "FAIL/WARN 项含「问题 + 修改建议」（与平台预审反馈同形）。"
+    "本检查对齐 3bench **平台 packagecheck** 可静态机检项："
+    "结构 / meta 人写交付 / 轮次 / scores·rubric / reports。一项 FAIL **不阻断**其余检测，一次汇总全部审核点。"
+    "**Docker Baseline+GT 由 Agent 按 SKILL §D 在临时深拷贝上执行**（不写用户包），脚本本身不强制 docker。"
+    "**不查集合过题比例**，不代表结算或终审。"
+    "每条 FAIL/WARN 含 问题 / 原因 / 违反 / 建议 + 下一步计划。"
     "**最终以甲方实际审核为准**。"
 )
+
+# 默认「违反」短名（无 per-code 时）
+DEFAULT_VIOLATION = "甲方要求说明 + 平台 packagecheck 交付/结构门槛"
+
+# code → (原因略述, 违反短名) 补充说明；message=问题，CODE_SUGGESTIONS=建议
+CODE_EXPLAIN: dict[str, tuple[str, str]] = {
+    "META_ANNOTATOR": (
+        "平台要求标注者背景齐全，用于可追溯与质量审核。",
+        "平台 structure：annotator_background.industry/years_experience/role；甲方 §5 meta",
+    ),
+    "META_COMPLETION_TIME": (
+        "完成本题/标注用时须可量化核对。",
+        "平台 structure：completion_time_min ∈ (0, 10080] 分钟",
+    ),
+    "META_AGREE": (
+        "根级 agreement_score 须为 [0,1] 真实数字（null/缺省不合格）。",
+        "平台 structure：agreement_score 数字 [0,1]",
+    ),
+    "META_TASK_ID_MISMATCH": (
+        "平台用目录名定位任务；与 task_id 不一致会硬挂。",
+        "平台 META_TASK_ID_MISMATCH；甲方交付包命名",
+    ),
+    "ALL_MODELS_PASS": (
+        "众包要求本题须拉开区分度，禁止三模型都测通。",
+        "平台/甲方众包单题硬门槛",
+    ),
+    "QWEN_MUST_FAIL": (
+        "千问本题过题率目标为 0。",
+        "甲方/平台：Qwen 本题 eval_pass 须 false",
+    ),
+    "BASELINE_MUST_FAIL": (
+        "未套 GT 时测试应失败，否则说明空壳测或答案已进 workspace。",
+        "甲方：Baseline 须测挂",
+    ),
+    "GT_MUST_PASS": (
+        "标准答案须能使测试全过，否则判题/答案不可验收。",
+        "甲方：套用 GT 后须测通",
+    ),
+    "DOCKER_DAEMON": (
+        "无 Docker 则无法验证可复现构建与 test.sh。",
+        "甲方 Docker 可构建可验收",
+    ),
+}
 
 # 平台 SoftWarningDisplay：message + 建议：suggestion。code 默认改法（显式 suggestion 优先）。
 CODE_SUGGESTIONS: dict[str, str] = {
@@ -104,11 +146,26 @@ CODE_SUGGESTIONS: dict[str, str] = {
     "META_RUBRIC_TYPE": "rubric_task_type 四选一：code_generation / bug_fix / code_qa / refactor。",
     "META_LANG": "meta.labels.code_lang 填语言（与 Taxonomy 一致）。",
     "META_APP": "meta.labels.application 填应用领域标签。",
-    "META_ONELINER": "补 one_liner 或 one_sentence_summary。",
-    "META_DIFF": "补 difficulty / annotator_background 等难度字段。",
-    "META_AGREE": "补根级 agreement_score。",
+    "META_ONELINER": "用 ≥20 字写清本题测什么与为何好；勿用 demo/test/todo 占位。",
+    "META_ONELINER_THIN": "用 ≥20 字写清本题测什么、核心难点与为何值得对比评测。",
+    "META_DIFF": "补非空 difficulty 字符串，或 difficulty_assessment 档位/文本。",
+    "META_ANNOTATOR": (
+        "meta.annotator_background = {industry, years_experience≥0 数字, role} 三项齐全。"
+    ),
+    "META_COMPLETION_TIME": (
+        "填 completion_time_min：出题+标注总分钟数，数字且 ∈(0, 10080]；常见约 30–720。"
+    ),
+    "META_AGREE": "根级 agreement_score 填 0–1 的数字（禁止 null）。",
+    "META_AGREE_ZERO": "若非真实零一致度，改填真实 0–1 值；单审可标 single_reviewer。",
     "META_TAGS": "tags 写成非空数组。",
     "META_JSON": "修正 meta.json 为合法 JSON 对象。",
+    "META_TIME_OUTLIER": "按真实用时改 completion_time_min，或 difficulty_reason 说明极端值。",
+    "BASELINE_MUST_FAIL": "加严 tests 或从 workspace 去掉答案，使未套 GT 时 test 失败。",
+    "GT_MUST_PASS": "修 ground_truth/solve，使套答案后 test 全过。",
+    "DOCKER_DAEMON": "安装并启动 Docker Desktop，再执行 docker version 确认 Server 可用。",
+    "DOCKER_BUILD_BASELINE": "在 environment/ 本地 docker build 按日志修 Dockerfile/钉死依赖。",
+    "DOCKER_BUILD_GT": "检查答案是否破坏构建；修文件后再跑。",
+    "GT_APPLY": "补 ground_truth 文件树（路径对齐 workspace）或可用 solution/solve.sh。",
     "README": "在包根补 README.md（题意/环境简述）。",
     "INSTRUCTION": "补 instruction.md（三模型同一份题面）。",
     "TASK_TOML": "补 task.toml（勿写真实密钥）。",
@@ -211,10 +268,31 @@ class Finding:
     level: str  # PASS | WARN | FAIL
     code: str
     message: str
-    suggestion: str = ""  # 可选：如何修改（对齐平台 Finding.Suggestion）
+    suggestion: str = ""  # 怎么改
+    explanation: str = ""  # 原因
+    violation: str = ""  # 违反哪条
 
     def display(self) -> str:
         return finding_display(self.message, self.suggestion)
+
+    def human_block(self) -> str:
+        """四段人话：问题 / 原因 / 违反 / 建议。"""
+        problem = (self.message or "").strip()
+        reason = (self.explanation or "").strip()
+        if not reason:
+            pair = CODE_EXPLAIN.get(self.code)
+            reason = pair[0] if pair else "该项未满足平台/甲方机检门槛。"
+        viol = (self.violation or "").strip()
+        if not viol:
+            pair = CODE_EXPLAIN.get(self.code)
+            viol = pair[1] if pair else DEFAULT_VIOLATION
+        sug = (self.suggestion or "").strip() or suggestion_for_code(self.code) or "对照 FAIL 文案与甲方要求说明改包后重跑预检。"
+        return (
+            f"**问题**：{problem}\n"
+            f"  **原因**：{reason}\n"
+            f"  **违反**：{viol}\n"
+            f"  **建议**：{sug}"
+        )
 
 
 @dataclass
@@ -240,12 +318,33 @@ class Report:
         code: str,
         message: str,
         suggestion: str = "",
+        explanation: str = "",
+        violation: str = "",
     ) -> None:
         sug = (suggestion or "").strip()
         if not sug and level in ("FAIL", "WARN"):
             sug = suggestion_for_code(code)
+        expl = (explanation or "").strip()
+        viol = (violation or "").strip()
+        if level in ("FAIL", "WARN"):
+            pair = CODE_EXPLAIN.get(code)
+            if not expl and pair:
+                expl = pair[0]
+            if not viol and pair:
+                viol = pair[1]
+            if not viol:
+                viol = DEFAULT_VIOLATION
+            if not expl:
+                expl = "该项未满足平台/甲方对交付或可验收性的机检要求。"
         self.findings.append(
-            Finding(level=level, code=code, message=message, suggestion=sug)
+            Finding(
+                level=level,
+                code=code,
+                message=message,
+                suggestion=sug,
+                explanation=expl,
+                violation=viol,
+            )
         )
 
     def finalize(self) -> None:
@@ -978,6 +1077,26 @@ def check_task_toml(package: Path, report: Report) -> None:
         report.add("PASS", "TOML_SECRET", "task.toml 未见明显硬编码密钥")
 
 
+def _as_float(v: Any) -> float | None:
+    if v is None or isinstance(v, bool):
+        return None
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _meta_one_liner_thin(s: str) -> bool:
+    runes = list((s or "").strip())
+    if len(runes) < 20:
+        return True
+    low = s.strip().lower()
+    for p in ("demo", "test", "todo", "placeholder", "简述本题", "一句话介绍", "tbd", "xxx"):
+        if low == p or low.startswith(p + " "):
+            return True
+    return False
+
+
 def check_meta(root: Path, package: Path, report: Report) -> None:
     path = package / "meta.json"
     if not path.is_file():
@@ -994,7 +1113,6 @@ def check_meta(root: Path, package: Path, report: Report) -> None:
     tid = meta.get("task_id")
     if tid:
         report.add("PASS", "META_TASK_ID", f"task_id = {tid}")
-        # 平台硬门槛：task_id 必须与任务目录名一致
         if str(tid) != package.name:
             report.add(
                 "FAIL",
@@ -1031,24 +1149,153 @@ def check_meta(root: Path, package: Path, report: Report) -> None:
     one = meta.get("one_liner") or meta.get("one_sentence_summary")
     if one and str(one).strip():
         report.add("PASS", "META_ONELINER", "有 one_liner")
+        if _meta_one_liner_thin(str(one)):
+            report.add(
+                "WARN",
+                "META_ONELINER_THIN",
+                "one_liner 过短或像占位文，未讲清测什么/为何是好题",
+            )
     else:
         report.add("FAIL", "META_ONELINER", "缺少 one_liner / one_sentence_summary")
 
-    if meta.get("difficulty") or meta.get("difficulty_assessment") or meta.get("annotator_background"):
-        report.add("PASS", "META_DIFF", "有难度相关字段")
+    diff_ok = False
+    if str(meta.get("difficulty") or "").strip():
+        diff_ok = True
+        report.add("PASS", "META_DIFF", f"difficulty = {meta.get('difficulty')}")
     else:
-        report.add("FAIL", "META_DIFF", "缺少 difficulty / annotator_background 等难度评估")
+        da = meta.get("difficulty_assessment")
+        if isinstance(da, str) and da.strip():
+            diff_ok = True
+            report.add("PASS", "META_DIFF", "有 difficulty_assessment 文本")
+        elif isinstance(da, dict):
+            if str(da.get("level") or da.get("difficulty") or "").strip():
+                diff_ok = True
+                report.add("PASS", "META_DIFF", "有 difficulty_assessment 档位")
+    if not diff_ok:
+        report.add(
+            "FAIL",
+            "META_DIFF",
+            "缺少非空 difficulty（或 difficulty_assessment 文本/档位）",
+        )
 
-    if "agreement_score" in meta:
-        report.add("PASS", "META_AGREE", f"agreement_score = {meta.get('agreement_score')}")
+    ab = meta.get("annotator_background")
+    if ab is None:
+        report.add(
+            "FAIL",
+            "META_ANNOTATOR",
+            "缺少 annotator_background（须含 industry / years_experience / role）",
+        )
+    elif not isinstance(ab, dict):
+        report.add(
+            "FAIL",
+            "META_ANNOTATOR",
+            "annotator_background 须为对象 {industry, years_experience, role}",
+        )
     else:
-        report.add("FAIL", "META_AGREE", "缺少 agreement_score")
+        miss: list[str] = []
+        industry = str(ab.get("industry") or "").strip()
+        role = str(ab.get("role") or "").strip()
+        years = _as_float(ab.get("years_experience"))
+        if years is None:
+            years = _as_float(ab.get("years"))
+        if not industry:
+            miss.append("industry")
+        if ab.get("years_experience") is None and ab.get("years") is None:
+            miss.append("years_experience")
+        elif years is None or years < 0:
+            miss.append("years_experience(须为≥0数字)")
+        if not role:
+            miss.append("role")
+        if miss:
+            report.add(
+                "FAIL",
+                "META_ANNOTATOR",
+                "annotator_background 不完整，缺/非法: " + ", ".join(miss),
+            )
+        else:
+            report.add(
+                "PASS",
+                "META_ANNOTATOR",
+                f"annotator_background: {industry} / {years:g} 年 / {role}",
+            )
+
+    ct = _as_float(meta.get("completion_time_min"))
+    if meta.get("completion_time_min") is None or ct is None:
+        report.add(
+            "FAIL",
+            "META_COMPLETION_TIME",
+            "缺少 completion_time_min（预估完成本题/标注用时，分钟，须为数字）",
+        )
+    elif ct <= 0 or ct > 10080:
+        report.add(
+            "FAIL",
+            "META_COMPLETION_TIME",
+            f"completion_time_min 须在 (0, 10080] 分钟内，当前={meta.get('completion_time_min')}",
+        )
+    else:
+        report.add("PASS", "META_COMPLETION_TIME", f"completion_time_min = {ct:g}")
+        if ct < 30 or ct > 720:
+            report.add(
+                "WARN",
+                "META_TIME_OUTLIER",
+                f"completion_time_min={ct:g} 偏离常见出题/标注区间（建议约 30–720 分钟）",
+            )
+        hda = meta.get("human_difficulty_assessment")
+        if isinstance(hda, dict):
+            est = _as_float(hda.get("estimated_minutes"))
+            if est is not None and est > 0 and (ct / est < 0.5 or ct / est > 2):
+                report.add(
+                    "WARN",
+                    "META_TIME_INCONSISTENT",
+                    f"completion_time_min={ct:g} 与 human_difficulty_assessment.estimated_minutes={est:g} 相差超过 2 倍",
+                    suggestion=(
+                        "统一两处用时口径（completion_time_min 通常为出题+标注总用时）"
+                    ),
+                )
+
+    af = _as_float(meta.get("agreement_score"))
+    if meta.get("agreement_score") is None or af is None:
+        report.add(
+            "FAIL",
+            "META_AGREE",
+            "agreement_score 须为 [0,1] 数字（禁止 null/缺省/非数字）",
+        )
+    elif af < 0 or af > 1:
+        report.add(
+            "FAIL",
+            "META_AGREE",
+            f"agreement_score 须在 [0,1]，当前={meta.get('agreement_score')}",
+        )
+    else:
+        report.add("PASS", "META_AGREE", f"agreement_score = {af:g}")
+        if af == 0:
+            report.add(
+                "WARN",
+                "META_AGREE_ZERO",
+                "agreement_score=0，可能是未填或占位",
+            )
+
+    status_blob = (
+        str(meta.get("agreement_score_status") or "")
+        + " "
+        + str(meta.get("review_status") or "")
+    ).lower()
+    if "single_reviewer" in status_blob:
+        report.add(
+            "WARN",
+            "META_SINGLE_REVIEWER",
+            "meta 标注 agreement 为 single_reviewer_only（单审、无交叉验证）",
+            suggestion=(
+                "建议增加第二 reviewer 交叉评分，或在 meta 注明单审原因"
+            ),
+        )
 
     tags = meta.get("tags")
     if isinstance(tags, list) and tags:
         report.add("PASS", "META_TAGS", f"tags 共 {len(tags)} 项")
     else:
         report.add("FAIL", "META_TAGS", "缺少 tags（数组）")
+
 
 
 def _load_yaml_soft(path: Path) -> dict[str, Any] | None:
@@ -1087,6 +1334,22 @@ def check_rubrics(package: Path, report: Report) -> None:
         tt = str(doc.get("task_type") or "").strip()
         if tt in RUBRIC_TYPES:
             report.add("PASS", "TASK_TYPE", f"task_type={tt}")
+            # 与 meta.rubric_task_type 一致
+            mp = package / "meta.json"
+            if mp.is_file():
+                try:
+                    meta = json.loads(mp.read_text(encoding="utf-8"))
+                except json.JSONDecodeError:
+                    meta = None
+                if isinstance(meta, dict):
+                    mtt = meta.get("rubric_task_type") or meta.get("task_type")
+                    if mtt and str(mtt).strip() != tt:
+                        report.add(
+                            "FAIL",
+                            "TASK_TYPE_META_MISMATCH",
+                            f"task_rubric.task_type={tt!r} 与 meta={mtt!r} 不一致",
+                            suggestion="统一 meta.rubric_task_type 与 rubrics/task_rubric.yaml 的 task_type",
+                        )
         else:
             report.add("FAIL", "TASK_TYPE", f"task_rubric.task_type 须为四选一，当前={tt!r}")
         criteria = doc.get("task_specific_criteria")
@@ -1238,9 +1501,30 @@ def check_rubric_scores(package: Path, report: Report) -> None:
                             "在 notes 说明「exec 过但 rubric 另有缺口」及依据。"
                         ),
                     )
-        if "agreement_score" not in mm:
+        ag = _as_float(mm.get("agreement_score"))
+        if mm.get("agreement_score") is None or ag is None:
             scores_ok = False
-            report.add("FAIL", f"AGREE_{key_hit}", f"{key_hit} 须含 agreement_score")
+            report.add(
+                "FAIL",
+                f"AGREE_{key_hit}",
+                f"{key_hit} 须含 agreement_score 数字 ∈ [0,1]（禁止 null/缺省）",
+            )
+        elif ag < 0 or ag > 1:
+            scores_ok = False
+            report.add(
+                "FAIL",
+                f"AGREE_{key_hit}",
+                f"{key_hit}：agreement_score 须在 [0,1]，当前={mm.get('agreement_score')}",
+            )
+        # notes：过题时鼓励写点评
+        notes = mm.get("notes") or mm.get("dimension_notes")
+        if isinstance(ep, bool) and ep and not notes:
+            report.add(
+                "WARN",
+                f"SCORES_NOTES_{key_hit}",
+                f"{key_hit}：eval_pass=true 但缺少 notes/dimension_notes（建议人工点评）",
+                suggestion="在 scores.models 下补 notes 或 dimension_notes，说明通过依据与扣分点。",
+            )
         # Soft：AI 草拟分
         if _model_ai_drafted(mm):
             report.add(
@@ -1403,6 +1687,58 @@ def check_reports_eval(package: Path, report: Report) -> None:
                 f"EVAL_MISMATCH_{label}",
                 f"{label} reports.eval_pass={ep} 与 scores.eval_pass={score_pass[label]} 不一致",
             )
+        # 深检：session_id / 是否空壳 report
+        chosen = None
+        for ef in eval_files:
+            try:
+                data = json.loads(ef.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                continue
+            if isinstance(data, dict) and (
+                isinstance(data.get("eval_pass"), bool) or "reward" in data
+            ):
+                chosen = data
+                break
+        if isinstance(chosen, dict):
+            sid = chosen.get("session_id") or chosen.get("sessionId")
+            if not sid:
+                report.add(
+                    "WARN",
+                    f"REPORTS_SESSION_ID_{label}",
+                    f"{label}：eval_result 未带 session_id（建议与轨迹主会话对应，便于溯源）",
+                    suggestion="在 reports/.../eval_result.json 写入 session_id（与 session 文件名 UUID 一致）。",
+                )
+            # 对应用 reports 下 rubric_scores.json 若存在且 eval 不一致
+            for rs in hit_dir.rglob("rubric_scores.json"):
+                try:
+                    rdoc = json.loads(rs.read_text(encoding="utf-8"))
+                except json.JSONDecodeError:
+                    report.add(
+                        "WARN",
+                        f"REPORTS_RUBRIC_JSON_{label}",
+                        f"{label}：reports 内 rubric_scores.json 非法 JSON：{rs.name}",
+                    )
+                    continue
+                if not isinstance(rdoc, dict):
+                    continue
+                # 若嵌套 models[key]
+                r_ep = None
+                if isinstance(rdoc.get("eval_pass"), bool):
+                    r_ep = rdoc["eval_pass"]
+                mb = rdoc.get("models")
+                if isinstance(mb, dict):
+                    for k in keys:
+                        m = mb.get(k)
+                        if isinstance(m, dict) and isinstance(m.get("eval_pass"), bool):
+                            r_ep = m["eval_pass"]
+                            break
+                if r_ep is not None and r_ep != ep:
+                    report.add(
+                        "FAIL",
+                        f"REPORTS_SCORES_MISMATCH_{label}",
+                        f"{label}：reports 内 rubric_scores.eval_pass={r_ep} 与 eval_result={ep} 不一致",
+                        suggestion="以实测 eval_result 为准，同步改 rubric_scores.json（包内 scores/ 与 reports/）。",
+                    )
 
 
 def check_bypass_sessions(package: Path, report: Report) -> None:
@@ -1705,6 +2041,7 @@ def check_one_package(package: Path, root: Path, report: Report) -> None:
 
 
 def run_check(root: Path) -> Report:
+    """全量静态审核：单项 FAIL 不阻断其余检测。Docker 见 SKILL §D（Agent 执行）。"""
     report = Report(task_dir=str(root))
     packages = discover_packages(root)
     sess = None
@@ -1744,8 +2081,57 @@ def run_check(root: Path) -> Report:
     for package in packages:
         check_one_package(package, scan_root, report)
 
+    report.add(
+        "PASS",
+        "DOCKER_AGENT_REMINDER",
+        "Docker Baseline/GT 须由 Agent 按 SKILL §D 在临时深拷贝上执行（脚本不替代）",
+    )
+
     report.finalize()
     return report
+
+
+def _next_steps(report: Report) -> list[str]:
+    fails = [f for f in report.findings if f.level == "FAIL"]
+    warns = [f for f in report.findings if f.level == "WARN"]
+    steps: list[str] = []
+    if fails:
+        steps.append(
+            "按上方 **全部 FAIL**（一次列出、勿只改第一项）逐项改包内对应文件；"
+            "改完后在同一路径重跑本预检，确认 FAIL=0。"
+        )
+        # bucket hints
+        codes = {f.code for f in fails}
+        if any(c.startswith("META_") for c in codes):
+            steps.append(
+                "补齐/修正 meta.json：annotator_background、completion_time_min、"
+                "agreement_score，以及与目录同名的 task_id。"
+            )
+        if any(c in ("DOCKER_PIP_PIN", "DOCKER_NPM_PIN", "DOCKER_IMAGE_PIN") for c in codes):
+            steps.append("钉死 Dockerfile 依赖：pip 仅 pkg==x.y.z；FROM 固定 tag；禁止 latest。")
+        if any(
+            c.startswith("SCORE")
+            or c.startswith("CORR")
+            or c.startswith("REPORT")
+            or c.startswith("EVAL_")
+            or c.startswith("AGREE_")
+            or c in ("ALL_MODELS_PASS", "QWEN_MUST_FAIL")
+            for c in codes
+        ):
+            steps.append("对齐 scores/rubric_scores.json 与 reports 的 eval_pass/五维分；收紧题难度以满足众包过题规则。")
+        if any(c.startswith("TURNS") or c.startswith("SESSION") or c.startswith("TRAJ") or c.startswith("GW") for c in codes):
+            steps.append("补 trajectories 下 session/ 与 cc-gateway-log；每模型仅 1 条主会话且 assistant≥20。")
+    else:
+        steps.append("结构静态项未出 FAIL：继续 §B merge_call_level 与 §D Docker（临时深拷贝）。")
+    steps.append(
+        "§D Docker（若 Agent 尚未跑）：深拷贝到临时目录 → docker build → "
+        "Baseline test 须失败 → 套 GT 后再测须通过；最后删临时目录与本机测试镜像。详见 SKILL。"
+    )
+    if warns:
+        steps.append(f"处理 {len(warns)} 条 WARN（潜在疑点，不单独记硬挂，上传前建议消掉）。")
+    steps.append("集合级自检：题量≥3、千问全挂、Opus≤60%、Opus−千问>20%、GLM≥1 过（脚本不查集合）。")
+    steps.append("上传 https://www.shixianw.com/3bench/upload ；平台更严且可能有 Claude 语义分项，绿预检≠终审。")
+    return steps
 
 
 def format_markdown(report: Report) -> str:
@@ -1758,30 +2144,43 @@ def format_markdown(report: Report) -> str:
         f"- 提交根目录：`{report.task_dir}`",
         f"- 甲方数据包：`{report.package_dir or '（未解析）'}`",
         f"- 轨迹目录：`{report.sessions_dir or '（未解析）'}`",
-        f"- 结构预检结论：**{report.verdict}**",
+        f"- **结论**：`{report.verdict}`",
         f"- 统计：FAIL={report.summary.get('FAIL', 0)} / WARN={report.summary.get('WARN', 0)} / PASS={report.summary.get('PASS', 0)}",
+        f"- 策略：**全量检测后一次汇报**（单项失败不中断其余审核点）",
+        f"- 用户包：**只读**；Docker 仅在系统临时目录深拷贝执行",
         "",
         f"> {report.disclaimer}",
         "",
     ]
     if fails:
-        lines.extend(["## 须修复（FAIL · 问题 + 修改建议）", ""])
-        for f in fails:
-            lines.append(f"- **FAIL** `{f.code}` — {f.display()}")
-        lines.append("")
+        lines.extend(["## 须修复（FAIL · 问题 / 原因 / 违反 / 建议）", ""])
+        for i, f in enumerate(fails, 1):
+            lines.append(f"### {i}. FAIL `{f.code}`")
+            lines.append(f.human_block())
+            lines.append("")
+    else:
+        lines.extend(["## 须修复（FAIL）", "", "无。", ""])
+
     if warns:
-        lines.extend(
-            [
-                "## 潜在疑点（WARN · 不单独当硬挂；建议关注）",
-                "",
-                "> 与平台 `warnings[]` 同形：`message` + 可选 `suggestion`，展示为「… 建议：…」。",
-                "",
-            ]
-        )
-        for f in warns:
-            lines.append(f"- **WARN** `{f.code}` — {f.display()}")
-        lines.append("")
-    lines.extend(["## 通过项（PASS，可折叠关注）", ""])
+        lines.extend(["## 潜在疑点（WARN · 全量列出，不单独当硬挂）", ""])
+        for i, f in enumerate(warns, 1):
+            lines.append(f"### {i}. WARN `{f.code}`")
+            lines.append(f.human_block())
+            lines.append("")
+    else:
+        lines.extend(["## 潜在疑点（WARN）", "", "无。", ""])
+
+    lines.extend(["## 下一步计划（不阻断 · 按序执行）", ""])
+    for i, s in enumerate(_next_steps(report), 1):
+        lines.append(f"{i}. {s}")
+    lines.append("")
+
+    lines.extend(
+        [
+            "## 通过项（PASS，摘要）",
+            "",
+        ]
+    )
     if not passes:
         lines.append("- （无）")
     else:
@@ -1790,18 +2189,18 @@ def format_markdown(report: Report) -> str:
     lines.extend(
         [
             "",
-            "## 结构预检未覆盖（须自行验证；最终以甲方实际审核为准）",
+            "## 本脚本仍不查 / 须另行确认",
             "",
-            "- 集合：题量≥3；Opus≤60%；Opus−千问>20%；GLM≥1（**单题**：本脚本已查禁三全过 / 千问挂，若有 scores）",
-            "- **Docker 内** Baseline FAIL / GT PASS（平台会真跑，本脚本不做 docker build）",
-            "- §B call-level 合并且字段校验（请另跑 merge_call_level.py --package … --check）",
-            "- apt 等全量 pin；私有题意语义；平台 Claude 语义分项",
-            "- 严格 assistant 轮次已按每模型 ≥20 FAIL；计法 = type=assistant 去重（与平台一致）",
+            "- **集合**过题比例与题量≥3（见甲方要求说明）",
+            "- §B call-level：`merge_call_level.py --package … --check`（临时目录，不写回包）",
+            "- 私有题意语义、平台 Claude 额外语义分项",
+            "- **§D Docker**：Agent 在临时深拷贝上做 Baseline 须挂 + 套 GT 后须过（见 SKILL，不改用户包）",
             "",
             "## Agent 汇报约定",
             "",
-            "- 对用户只复述 FAIL/WARN 时须带 **修改建议**（与上表「建议：」一致）；勿只写黑话",
-            "- **只读用户包**；勿就地改包「帮用户修好」再声称预检通过",
+            "- 对用户复述 **全部** FAIL 与 WARN（四段：问题/原因/违反/建议），勿只报第一项",
+            "- 给出 **下一步计划**；不因单项失败截断其它检测",
+            "- **禁止修改用户数据包**；勿就地「修好」再声称通过",
             "",
         ]
     )
@@ -1810,7 +2209,7 @@ def format_markdown(report: Report) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="众包任务包上传前结构预检（trajectories 须含 session/ + cc-gateway-log/）"
+        description="众包任务包上传前结构/人写交付预检（Docker 由 Agent 按 SKILL §D 执行）"
     )
     parser.add_argument(
         "--task-dir",
@@ -1840,13 +2239,30 @@ def main() -> int:
         "verdict": report.verdict,
         "summary": report.summary,
         "disclaimer": report.disclaimer,
+        "next_steps": _next_steps(report),
         "findings": [asdict(f) for f in report.findings],
+        "failures": [
+            {
+                "code": f.code,
+                "message": f.message,
+                "explanation": f.explanation,
+                "violation": f.violation,
+                "suggestion": f.suggestion,
+                "display": f.display(),
+                "human": f.human_block(),
+            }
+            for f in report.findings
+            if f.level == "FAIL"
+        ],
         "warnings": [
             {
                 "code": f.code,
                 "message": f.message,
+                "explanation": f.explanation,
+                "violation": f.violation,
                 "suggestion": f.suggestion,
                 "display": f.display(),
+                "human": f.human_block(),
             }
             for f in report.soft_warnings()
         ],
@@ -1854,12 +2270,10 @@ def main() -> int:
     if args.json:
         json_path = args.json.expanduser().resolve()
         package_root = Path(report.package_dir).resolve() if report.package_dir else task_dir
-        # refuse write under task_dir or detected package tree
         for root, label in ((task_dir, "task-dir"), (package_root, "package")):
             try:
                 json_path.relative_to(root)
             except ValueError:
-                # package_dir may be multi-path string - only exact when single path exists
                 continue
             print(
                 f"ERROR: 预检 skill 禁止对用户数据包写入报告（--json={json_path} 落在 {label}={root} 内）。"
@@ -1867,17 +2281,27 @@ def main() -> int:
                 file=sys.stderr,
             )
             return 2
-        # also refuse if package_dir is a single existing dir
         try:
             pd = Path(report.package_dir)
             if pd.is_dir() and json_path.is_relative_to(pd.resolve()):
                 print(
-                    f"ERROR: 预检 skill 禁止对用户数据包写入报告（--json 落在 package 内）。",
+                    "ERROR: 预检 skill 禁止对用户数据包写入报告（--json 落在 package 内）。",
                     file=sys.stderr,
                 )
                 return 2
         except (ValueError, OSError, TypeError):
             pass
+        packages = discover_packages(task_dir)
+        for p in packages:
+            try:
+                if json_path.is_relative_to(p.resolve()):
+                    print(
+                        "ERROR: 预检 skill 禁止对用户数据包写入报告（--json 落在 package 内）。",
+                        file=sys.stderr,
+                    )
+                    return 2
+            except (ValueError, OSError):
+                pass
         json_path.parent.mkdir(parents=True, exist_ok=True)
         json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -1889,18 +2313,23 @@ def main() -> int:
                 {
                     "verdict": report.verdict,
                     "summary": report.summary,
+                    "next_steps": payload["next_steps"],
                     "fail_preview": [
-                        {"code": f.code, "display": f.display()}
+                        {"code": f.code, "message": f.message, "suggestion": f.suggestion}
                         for f in report.findings
                         if f.level == "FAIL"
-                    ][:8],
-                    "warnings": payload["warnings"][:10],
+                    ],
+                    "warnings": [
+                        {"code": w["code"], "message": w["message"]}
+                        for w in payload["warnings"]
+                    ][:20],
                 },
                 ensure_ascii=False,
             )
         )
 
     return 0 if report.verdict != "PRECHECK_FAIL" else 1
+
 
 
 if __name__ == "__main__":
