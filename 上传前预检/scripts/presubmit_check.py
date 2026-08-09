@@ -79,12 +79,12 @@ RUBRIC_DIMS = (
 MIN_ASSISTANT_TURNS = 20
 
 DISCLAIMER = (
-    "本检查对齐 3bench **平台 packagecheck** 可静态机检项："
-    "结构 / meta 人写交付 / 轮次 / scores·rubric / reports。一项 FAIL **不阻断**其余检测，一次汇总全部审核点。"
-    "**Docker Baseline+GT 由 Agent 按 SKILL §D 在临时深拷贝上执行**（不写用户包），脚本本身不强制 docker。"
-    "**不查集合过题比例**，不代表结算或终审。"
-    "每条 FAIL/WARN 含 问题 / 原因 / 违反 / 建议 + 下一步计划。"
-    "**最终以甲方实际审核为准**。"
+    "本检查覆盖 3bench 平台 packagecheck **静态硬项**（结构/meta/轮次/scores/reports）；"
+    "一项 FAIL **不阻断**其余项，一次汇总。"
+    "脚本不跑 Docker；**Agent 须按 SKILL 完成 §B call-level、§D 临时拷贝 Docker、§E reports_review"
+    "+ instruction_tests_audit（见 SEMANTIC_REVIEW.md）及 §C 集合自检。**"
+    "完整跑完并清 FAIL 后，目标是平台预审尽量直过；≠ 甲方终审。"
+    "每条 FAIL/WARN：问题/原因/违反/建议 + 下一步。"
 )
 
 # 默认「违反」短名（无 per-code 时）
@@ -1062,6 +1062,21 @@ def check_instruction(package: Path, report: Report) -> None:
             )
         else:
             report.add("PASS", "INSTRUCTION_LEAK", "instruction.md 未见明显泄题关键词")
+
+    # 软：目标/完成可执行性（启发式；深审见 SKILL §E）
+    has_goalish = any(
+        k in text for k in ("目标", "完成", "要求", "Implement", "implement", "需", "验收", "约束")
+    )
+    if len(text.strip()) >= 40 and not has_goalish:
+        report.add(
+            "WARN",
+            "INSTRUCTION_GOAL_SOFT",
+            "instruction.md 未见明显「目标/完成标准/约束」类表述，平台语义审可能判题面不充分",
+            suggestion="补清：任务目标、完成标准、禁止项；勿写答题步骤泄测。深审见 SEMANTIC_REVIEW.md §E2。",
+            explanation="平台 Claude 会看 instruction 是否可执行；仅机检长度不够。",
+            violation="平台 instruction_tests_audit 软项 / 甲方题面可执行",
+        )
+
     if SECRET_RE.search(text) or SECRET_EXTRA_RE.search(text):
         report.add("FAIL", "INSTRUCTION_SECRET", "instruction.md 疑似含密钥/token")
 
@@ -2016,6 +2031,118 @@ def discover_packages(root: Path) -> list[Path]:
     return pkgs
 
 
+
+def _read_model_eval_passes(package: Path) -> dict[str, bool | None]:
+    """Prefer reports eval_pass, fill gaps from scores (platform models summary style)."""
+    labels_keys = [
+        ("claude-opus-4.8", ("claude-opus-4-8", "claude-opus-4.8")),
+        ("qwen-3.7-max", ("qwen-3.7-max",)),
+        ("glm-5.2", ("glm-5.2",)),
+    ]
+    out: dict[str, bool | None] = {lab: None for lab, _ in labels_keys}
+    reports = package / "reports"
+    if reports.is_dir():
+        for lab, keys in labels_keys:
+            for k in keys:
+                d = reports / k
+                if not d.is_dir():
+                    continue
+                for ef in d.rglob("eval_result.json"):
+                    try:
+                        data = json.loads(ef.read_text(encoding="utf-8"))
+                    except json.JSONDecodeError:
+                        continue
+                    if not isinstance(data, dict):
+                        continue
+                    if isinstance(data.get("eval_pass"), bool):
+                        out[lab] = data["eval_pass"]
+                        break
+                    if "reward" in data:
+                        try:
+                            out[lab] = float(data["reward"]) >= 1.0
+                            break
+                        except (TypeError, ValueError):
+                            pass
+                if out[lab] is not None:
+                    break
+    sp = package / "scores" / "rubric_scores.json"
+    if sp.is_file():
+        try:
+            root = json.loads(sp.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            root = None
+        mb = root.get("models") if isinstance(root, dict) else None
+        if isinstance(mb, dict):
+            for lab, keys in labels_keys:
+                if out[lab] is not None:
+                    continue
+                for k in keys:
+                    m = mb.get(k)
+                    if isinstance(m, dict) and isinstance(m.get("eval_pass"), bool):
+                        out[lab] = m["eval_pass"]
+                        break
+    return out
+
+
+def check_agent_semantic_gates(package: Path, report: Report) -> None:
+    """Force visibility of §E (platform reports_review / instruction_tests_audit). Agent must still execute."""
+    ep = _read_model_eval_passes(package)
+    known = [v for v in ep.values() if isinstance(v, bool)]
+    all_failed = len(known) == 3 and all(v is False for v in known)
+    any_pass = any(v is True for v in known)
+
+    report.add(
+        "WARN",
+        "SEMANTIC_REPORTS_REVIEW_REQUIRED",
+        f"{package.name}：Agent **必须**完成 §E reports_review（人填 scores/reports 语义、叙事是否甩锅、"
+        f"session 是否对齐）。脚本无法代做 Claude 语义；详见 SEMANTIC_REVIEW.md。",
+        suggestion=(
+            "只读 reports/** 与 scores/rubric_scores.json、session；"
+            "输出 reports_review: PASS|WARN|FAIL + conclusion + 四段条目。见 SEMANTIC_REVIEW.md E1。"
+        ),
+        explanation=(
+            "平台 precheck-judgment 无论硬项是否通过都跑 reports_review；"
+            "不做则上传后可能被 Claude 语义分项挡住。"
+        ),
+        violation="平台 judgment.reports_review（恒 RUN）",
+    )
+
+    if all_failed:
+        report.add(
+            "WARN",
+            "SEMANTIC_INSTRUCTION_AUDIT_REQUIRED",
+            f"{package.name}：三模型 eval_pass 均为 false → Agent **必须**深入 instruction_tests_audit"
+            f"（题面+Baseline+tests 是否不公）。",
+            suggestion=(
+                "对照 instruction / 未套 GT 的 workspace / tests；"
+                "不公则 FAIL，合理难题 PASS，仅偏薄 WARN。模板见 SEMANTIC_REVIEW.md E2。"
+            ),
+            explanation="平台在 all_models_failed 时强制 instruction+tests 公平性审查，FAIL 会挡 PASSED。",
+            violation="平台 judgment.instruction_tests_audit（三模全挂）",
+        )
+    else:
+        skip_reason = (
+            "非三模型全挂"
+            if any_pass or len(known) < 3
+            else "无法完整解析三模型 eval_pass"
+        )
+        report.add(
+            "PASS",
+            "SEMANTIC_INSTRUCTION_AUDIT_SKIP_HINT",
+            f"{package.name}：instruction_tests_audit 可写 SKIP（{skip_reason}）；"
+            f"仍建议软读 instruction/tests 偏薄项 → WARN。reports_review 仍必做。",
+            suggestion="汇报写 instruction_tests_audit: SKIP 与简短 conclusion；薄题进软 WARN。",
+            explanation="平台非全挂时该分项 SKIP，但软不足进 warnings。",
+            violation="平台 judgment.instruction_tests_audit SKIP 规则",
+        )
+
+    report.add(
+        "PASS",
+        "SEMANTIC_PLATFORM_GOAL",
+        f"{package.name}：目标=§A+§B+§D+§E 全过后尽量 platform 预审直过（终审另计）",
+    )
+
+
 def check_one_package(package: Path, root: Path, report: Report) -> None:
     report.add("PASS", "PKG_BEGIN", f"—— 检查数据包：{package.name}/ ——")
     check_dirname(package, report)
@@ -2038,6 +2165,7 @@ def check_one_package(package: Path, root: Path, report: Report) -> None:
     else:
         report.add("FAIL", "TRAJ_ROOT", f"{package.name}/ 缺失 trajectories/（每模型须含 session/ + cc-gateway-log/）")
     check_no_agents_required(package, report)
+    check_agent_semantic_gates(package, report)
 
 
 def run_check(root: Path) -> Report:
@@ -2086,6 +2214,11 @@ def run_check(root: Path) -> Report:
         "DOCKER_AGENT_REMINDER",
         "Docker Baseline/GT 须由 Agent 按 SKILL §D 在临时深拷贝上执行（脚本不替代）",
     )
+    report.add(
+        "PASS",
+        "FULL_PLATFORM_PATH",
+        "可上传声明条件：§A 无 FAIL + §B call-level 过 + §D Docker 过 + §E 语义非 FAIL + §C 集合自检；见 SKILL",
+    )
 
     report.finalize()
     return report
@@ -2124,13 +2257,27 @@ def _next_steps(report: Report) -> list[str]:
     else:
         steps.append("结构静态项未出 FAIL：继续 §B merge_call_level 与 §D Docker（临时深拷贝）。")
     steps.append(
-        "§D Docker（若 Agent 尚未跑）：深拷贝到临时目录 → docker build → "
-        "Baseline test 须失败 → 套 GT 后再测须通过；最后删临时目录与本机测试镜像。详见 SKILL。"
+        "§B：merge_call_level.py --package … --check（临时目录，不写回包）。"
+    )
+    steps.append(
+        "§D Docker：深拷贝到临时目录 → build → Baseline 须挂 → 套 GT 须过 → 清理。"
+        "详见 SKILL §D（禁止改用户包）。"
+    )
+    steps.append(
+        "§E 语义（对齐平台 Claude）：必做 reports_review；若 SEMANTIC_INSTRUCTION_AUDIT_REQUIRED "
+        "则深入 instruction_tests_audit。清单 SEMANTIC_REVIEW.md；结论写入总汇报。"
     )
     if warns:
-        steps.append(f"处理 {len(warns)} 条 WARN（潜在疑点，不单独记硬挂，上传前建议消掉）。")
-    steps.append("集合级自检：题量≥3、千问全挂、Opus≤60%、Opus−千问>20%、GLM≥1 过（脚本不查集合）。")
-    steps.append("上传 https://www.shixianw.com/3bench/upload ；平台更严且可能有 Claude 语义分项，绿预检≠终审。")
+        steps.append(
+            f"处理 {len(warns)} 条 WARN（含 SEMANTIC_* 待办；上传前建议 WARN→0 以贴近平台通过）。"
+        )
+    steps.append(
+        "§C 集合：题量≥3、千问全挂、Opus≤60%、Opus−千问>20%、GLM≥1（脚本不查，须表格式自检）。"
+    )
+    steps.append(
+        "全部完成后上传 https://www.shixianw.com/3bench/upload ；"
+        "目标 platform 预审直过；甲方终审另计。"
+    )
     return steps
 
 
@@ -2189,18 +2336,18 @@ def format_markdown(report: Report) -> str:
     lines.extend(
         [
             "",
-            "## 本脚本仍不查 / 须另行确认",
+            "## Agent 必做（脚本不替代 · 对齐 platform 全路径）",
             "",
-            "- **集合**过题比例与题量≥3（见甲方要求说明）",
-            "- §B call-level：`merge_call_level.py --package … --check`（临时目录，不写回包）",
-            "- 私有题意语义、平台 Claude 额外语义分项",
-            "- **§D Docker**：Agent 在临时深拷贝上做 Baseline 须挂 + 套 GT 后须过（见 SKILL，不改用户包）",
+            "- **§B** call-level 合并校验",
+            "- **§D** 临时深拷贝 Docker：Baseline 挂 + GT 过",
+            "- **§E** `reports_review`（恒做）+ 条件 `instruction_tests_audit` → `SEMANTIC_REVIEW.md`",
+            "- **§C** 集合过题比例（见甲方要求说明）",
+            "- 总报告**必须**含 §D/§E 分项 status + conclusion 后才能声称「可尽量 platform 预审过」",
             "",
             "## Agent 汇报约定",
             "",
-            "- 对用户复述 **全部** FAIL 与 WARN（四段：问题/原因/违反/建议），勿只报第一项",
-            "- 给出 **下一步计划**；不因单项失败截断其它检测",
-            "- **禁止修改用户数据包**；勿就地「修好」再声称通过",
+            "- 复述 **全部** FAIL 与 WARN（四段），含 SEMANTIC_* 待办落地后的真实语义结论",
+            "- 不因单项失败截断；**禁止修改用户数据包**",
             "",
         ]
     )
